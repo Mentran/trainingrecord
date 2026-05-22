@@ -38,6 +38,8 @@ export default function TechniquePage() {
   const [saving, setSaving] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [categoryFilter, setCategoryFilter] = useState<string>('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [sortBy, setSortBy] = useState<'time' | 'votes'>('time')
   const [importText, setImportText] = useState('')
   const [importing, setImporting] = useState(false)
   const [showImport, setShowImport] = useState(false)
@@ -52,12 +54,22 @@ export default function TechniquePage() {
     const cache = getGeneratedCache(sport.id)
     setGenerated(cache ? cache.items : [])
     setCategoryFilter('')
+    setSearchQuery('')
+    setSortBy('time')
   }, [sport.id])
 
   const categories = sport.categories ?? []
-  const filteredNotes = categoryFilter
-    ? notes.filter(n => n.category === categoryFilter)
-    : notes
+  const filteredNotes = notes
+    .filter(n => !categoryFilter || n.category === categoryFilter)
+    .filter(n => {
+      if (!searchQuery.trim()) return true
+      const q = searchQuery.trim().toLowerCase()
+      return n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q) || (n.tags ?? []).some(t => t.toLowerCase().includes(q))
+    })
+    .sort((a, b) => sortBy === 'votes'
+      ? (b.votes ?? 0) - (a.votes ?? 0) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
 
   async function handleGenerate() {
     setGenerating(true)
@@ -150,7 +162,7 @@ export default function TechniquePage() {
       <div className="px-4 pt-4 pb-2">
         <div className="flex rounded-2xl p-1 gap-1" style={{ background: '#F0F0EA' }}>
           {([['user', '我的总结'], ['ai', 'AI 草稿箱']] as [Tab, string][]).map(([key, label]) => (
-            <button key={key} onClick={() => { setTab(key); setCategoryFilter('') }}
+            <button key={key} onClick={() => { setTab(key); setCategoryFilter(''); setSearchQuery('') }}
               className="flex-1 py-2 rounded-xl text-sm font-semibold transition"
               style={tab === key
                 ? { background: sport.color, color: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.15)' }
@@ -199,6 +211,39 @@ export default function TechniquePage() {
             </div>
           )}
 
+          {/* 搜索 + 排序 */}
+          {notes.length > 0 && (
+            <div className="flex gap-2 mb-3">
+              <div className="flex-1 relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#ADADAD]" width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/>
+                  <path d="M9.5 9.5l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                </svg>
+                <input
+                  type="text"
+                  placeholder="搜索技巧…"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="w-full pl-8 pr-3 py-2 rounded-xl border border-[#E8E8E2] bg-white text-sm text-[#1A1A1A] outline-none focus:ring-2 focus:border-transparent"
+                  style={{ '--tw-ring-color': sport.accentColor + '60' } as React.CSSProperties}
+                />
+              </div>
+              <button
+                onClick={() => setSortBy(s => s === 'time' ? 'votes' : 'time')}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-medium transition"
+                style={sortBy === 'votes'
+                  ? { background: sport.accentColor + '18', color: sport.accentColor, borderColor: sport.accentColor + '40' }
+                  : { background: 'white', color: '#6B7280', borderColor: '#E8E8E2' }
+                }>
+                {sortBy === 'votes' ? (
+                  <><svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M7 12S1.5 8.5 1.5 4.5a2.5 2.5 0 015 0 2.5 2.5 0 015 0C12.5 8.5 7 12 7 12z" stroke="currentColor" strokeWidth="1.3" fill="currentColor" strokeLinejoin="round"/></svg>爱心</>
+                ) : (
+                  <><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 3h9M2 6.5h6M2 10h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>时间</>
+                )}
+              </button>
+            </div>
+          )}
+
           {notes.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <div className="w-16 h-16 rounded-3xl flex items-center justify-center text-3xl"
@@ -210,7 +255,9 @@ export default function TechniquePage() {
             <NoteList notes={filteredNotes} sport={sport} expandedId={expandedId}
               onExpand={setExpandedId} onEdit={openEdit} onDelete={handleDelete} onVote={handleVote} />
           ) : (
-            <p className="text-xs text-[#9B9B9B] text-center py-8">该分类下暂无技巧</p>
+            <p className="text-xs text-[#9B9B9B] text-center py-8">
+              {searchQuery.trim() ? `未找到"${searchQuery.trim()}"相关技巧` : '该分类下暂无技巧'}
+            </p>
           )}
         </div>
       )}
