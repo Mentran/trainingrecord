@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { exportAll, validateBackup, importBackup, saveSport, updateSport, deleteSport, DEFAULT_SPORT } from '../lib/storage'
+import { exportAll, validateBackup, importBackup, saveSport, updateSport, deleteSport, DEFAULT_SPORT, SPORT_CATEGORY_PRESETS } from '../lib/storage'
 import { getAIConfig, setAIConfig, hasApiKey, generateSportCategories, categorizeTechniques, type AIConfig } from '../lib/ai'
 import { getTechniques, updateTechnique } from '../lib/storage'
 import { useToast } from '../components/ToastProvider'
@@ -87,7 +87,8 @@ export default function SettingsPage() {
   function handleAddSport() {
     if (!addForm.name.trim()) return
     const preset = PRESET_COLORS[addForm.colorIndex]
-    saveSport({ name: addForm.name.trim(), icon: addForm.icon, color: preset.color, accentColor: preset.accent, categories: [] })
+    const categories = SPORT_CATEGORY_PRESETS[addForm.name.trim()] ?? []
+    saveSport({ name: addForm.name.trim(), icon: addForm.icon, color: preset.color, accentColor: preset.accent, categories })
     refreshSports()
     setShowAddSport(false)
     setAddForm({ name: '', icon: '🏃', colorIndex: 1 })

@@ -75,7 +75,7 @@ export default function ListPage() {
 
         {/* 多运动切换 */}
         {sports.length > 1 && (
-          <div className="flex gap-2 mb-5 overflow-x-auto scrollbar-none pb-0.5">
+          <div className="relative flex gap-2 mb-5 overflow-x-auto scrollbar-none pb-0.5">
             {sports.map(s => (
               <button key={s.id} onClick={() => switchSport(s.id)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold flex-shrink-0 transition"
@@ -112,7 +112,7 @@ export default function ListPage() {
         </div>
 
         {/* 统计数字 */}
-        <div className="grid grid-cols-3 gap-3 relative">
+        <div className="relative grid grid-cols-3 gap-3">
           {[
             { value: totalSessions, unit: '次', label: '训练' },
             { value: totalHours, unit: 'h', label: '总时长' },
