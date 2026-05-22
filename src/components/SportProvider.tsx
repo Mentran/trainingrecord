@@ -10,7 +10,7 @@ interface SportContextValue {
 }
 
 const SportContext = createContext<SportContextValue>({
-  sport: { id: 'tennis', name: '网球', icon: '🎾', color: '#1A2E1A', accentColor: '#9DC41A', createdAt: '' },
+  sport: { id: 'tennis', name: '网球', icon: '🎾', color: '#1A2E1A', accentColor: '#9DC41A', categories: [], createdAt: '' },
   sports: [],
   switchSport: () => {},
   refreshSports: () => {},

@@ -4,12 +4,6 @@ const CONFIG_KEY = 'ai_config'
 const LEGACY_KEY = 'claude_api_key'
 const GENERATED_CACHE_KEY = 'technique_generated_cache'
 
-export interface GeneratedTechniqueCache {
-  sportId: string
-  items: GeneratedTechnique[]
-  generatedAt: string
-}
-
 export interface AIConfig {
   apiUrl: string
   apiKey: string
@@ -158,6 +152,12 @@ export interface GeneratedTechnique {
   tags: string[]
 }
 
+export interface GeneratedTechniqueCache {
+  sportId: string
+  items: GeneratedTechnique[]
+  generatedAt: string
+}
+
 export function getGeneratedCache(sportId: string): GeneratedTechniqueCache | null {
   try {
     const raw = localStorage.getItem(GENERATED_CACHE_KEY)
@@ -207,7 +207,86 @@ ${recordSummary}
   }
 }
 
-// ── Chat messages ────────────────────────────────────────
+// ── Generate sport categories ────────────────────────────
+
+export async function generateSportCategories(sportName: string): Promise<string[]> {
+  const config = getAIConfig()
+  const prompt = `请为「${sportName}」这项运动生成6-8个核心技术分类标签，用于对训练技巧笔记进行分类管理。
+
+要求：
+- 覆盖该运动最主要的技术方向
+- 每个分类2-4个字，简洁明确
+- 适合初学者到中级水平
+
+请严格按 JSON 数组格式返回，不要有其他内容：
+["分类1","分类2","分类3"]`
+
+  const data = await callAPI(config, { max_tokens: 200, messages: [{ role: 'user', content: prompt }] })
+  try {
+    const cleaned = data.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
+    return JSON.parse(cleaned) as string[]
+  } catch {
+    throw new Error('AI 返回格式异常，请重试')
+  }
+}
+
+export async function categorizeTechniques(
+  notes: Array<{ id: string; title: string; content: string }>,
+  categories: string[],
+): Promise<Array<{ id: string; category: string }>> {
+  const config = getAIConfig()
+  const noteList = notes.map(n => `{"id":"${n.id}","title":"${n.title}"}`).join('\n')
+  const prompt = `请将以下技巧笔记归类到对应分类中。
+
+可用分类：${categories.join('、')}
+
+笔记列表：
+${noteList}
+
+请严格按 JSON 数组格式返回，不要有其他内容：
+[{"id":"笔记id","category":"分类名"}]`
+
+  const data = await callAPI(config, { max_tokens: 1000, messages: [{ role: 'user', content: prompt }] })
+  try {
+    const cleaned = data.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
+    return JSON.parse(cleaned) as Array<{ id: string; category: string }>
+  } catch {
+    throw new Error('AI 返回格式异常，请重试')
+  }
+}
+
+
+
+export async function parseExperienceText(
+  text: string,
+  sportName: string,
+): Promise<GeneratedTechnique[]> {
+  const config = getAIConfig()
+
+  const prompt = `你是一位专业的${sportName}教练。用户粘贴了一段训练经验或教练指导文字，请将其整理为若干条独立的技巧条目。
+
+要求：
+- 每条针对一个具体动作或技术环节
+- 内容简洁实用，80字以内
+- 标签选自文字中提到的技术点
+- 如果原文已经很简洁，可以直接整理为1-2条
+
+原文：
+${text}
+
+请严格按以下 JSON 数组格式返回，不要有其他内容：
+[{"title":"动作名称","content":"技术要点说明","tags":["标签1","标签2"]}]`
+
+  const data = await callAPI(config, { max_tokens: 1500, messages: [{ role: 'user', content: prompt }] })
+  try {
+    const cleaned = data.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
+    return JSON.parse(cleaned) as GeneratedTechnique[]
+  } catch {
+    throw new Error('AI 返回格式异常，请重试')
+  }
+}
+
+
 
 export interface ChatMessage {
   id: string

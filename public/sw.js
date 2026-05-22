@@ -1,4 +1,4 @@
-const CACHE_NAME = 'training-app-v1'
+const CACHE_NAME = 'training-app-v2'
 
 self.addEventListener('install', event => {
   event.waitUntil(

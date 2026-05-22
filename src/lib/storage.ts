@@ -11,6 +11,7 @@ export const DEFAULT_SPORT: Sport = {
   icon: '🎾',
   color: '#1A2E1A',
   accentColor: '#9DC41A',
+  categories: ['正手', '反手', '发球', '步伐', '截击', '战术'],
   createdAt: '2026-01-01T00:00:00.000Z',
 }
 
@@ -24,7 +25,9 @@ export function getSports(): Sport[] {
   try {
     const raw = localStorage.getItem(SPORTS_KEY)
     if (!raw) return [DEFAULT_SPORT]
-    const list = JSON.parse(raw) as Sport[]
+    let list = JSON.parse(raw) as Sport[]
+    // 迁移：旧数据没有 categories 字段
+    list = list.map(s => s.categories ? s : { ...s, categories: s.id === DEFAULT_SPORT.id ? DEFAULT_SPORT.categories : [] })
     // 保证默认网球项目始终存在
     if (!list.find(s => s.id === DEFAULT_SPORT.id)) {
       list.unshift(DEFAULT_SPORT)
@@ -41,6 +44,14 @@ export function saveSport(data: Omit<Sport, 'id' | 'createdAt'>): Sport {
   sports.push(sport)
   localStorage.setItem(SPORTS_KEY, JSON.stringify(sports))
   return sport
+}
+
+export function updateSport(id: string, data: Partial<Omit<Sport, 'id' | 'createdAt'>>): void {
+  const sports = getSports()
+  const idx = sports.findIndex(s => s.id === id)
+  if (idx === -1) return
+  sports[idx] = { ...sports[idx], ...data }
+  localStorage.setItem(SPORTS_KEY, JSON.stringify(sports))
 }
 
 export function deleteSport(id: string): void {
@@ -123,29 +134,63 @@ export function getCoaches(sportId?: string): string[] {
   return coaches
 }
 
-export function exportRecords(): string {
-  return JSON.stringify(getRecords(), null, 2)
+export interface AppBackup {
+  version: 2
+  exportedAt: string
+  records: TrainingRecord[]
+  techniques: TechniqueNote[]
+  sports: Sport[]
 }
 
-export function validateImport(json: string): { valid: boolean; count: number; error?: string } {
+export function exportAll(): string {
+  const backup: AppBackup = {
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    records: getRecords(),
+    techniques: getTechniques(),
+    sports: getSports(),
+  }
+  return JSON.stringify(backup, null, 2)
+}
+
+export function validateBackup(json: string): { valid: boolean; summary: string; error?: string } {
   try {
-    const data = JSON.parse(json)
-    if (!Array.isArray(data)) return { valid: false, count: 0, error: '格式错误：需要数组' }
-    for (const item of data) {
-      if (!item.id || !item.date || !item.content) {
-        return { valid: false, count: 0, error: '格式错误：记录缺少必要字段' }
-      }
+    const data = JSON.parse(json) as Partial<AppBackup>
+    // 兼容旧格式（纯记录数组）
+    if (Array.isArray(data)) {
+      return { valid: true, summary: `训练记录 ${(data as TrainingRecord[]).length} 条（旧格式）` }
     }
-    return { valid: true, count: data.length }
+    if (data.version !== 2) return { valid: false, summary: '', error: '不支持的备份格式' }
+    const parts = [
+      `训练记录 ${data.records?.length ?? 0} 条`,
+      `技巧笔记 ${data.techniques?.length ?? 0} 条`,
+      `运动项目 ${data.sports?.length ?? 0} 个`,
+    ]
+    return { valid: true, summary: parts.join('，') }
   } catch {
-    return { valid: false, count: 0, error: 'JSON 解析失败' }
+    return { valid: false, summary: '', error: 'JSON 解析失败' }
   }
 }
 
-export function importRecords(json: string): void {
-  const data = JSON.parse(json)
-  localStorage.setItem(RECORDS_KEY, JSON.stringify(data))
+export function importBackup(json: string): void {
+  const data = JSON.parse(json) as AppBackup | TrainingRecord[]
+  // 兼容旧格式（纯记录数组）
+  if (Array.isArray(data)) {
+    localStorage.setItem(RECORDS_KEY, JSON.stringify(data))
+    return
+  }
+  if (data.records) localStorage.setItem(RECORDS_KEY, JSON.stringify(data.records))
+  if (data.techniques) localStorage.setItem(TECHNIQUES_KEY, JSON.stringify(data.techniques))
+  if (data.sports) localStorage.setItem(SPORTS_KEY, JSON.stringify(data.sports))
 }
+
+// 保留旧名称供外部兼容
+export function exportRecords(): string { return exportAll() }
+export function validateImport(json: string): { valid: boolean; count: number; error?: string } {
+  const r = validateBackup(json)
+  return { valid: r.valid, count: 0, error: r.error }
+}
+export function importRecords(json: string): void { importBackup(json) }
 
 export function getTechniques(sportId?: string): TechniqueNote[] {
   try {

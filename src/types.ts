@@ -20,6 +20,7 @@ export interface Sport {
   icon: string                 // emoji，如"🎾"
   color: string                // 主题色 hex（深色，用于 header）
   accentColor: string          // 强调色 hex（亮色，用于 badge/按钮）
+  categories: string[]         // 技术分类，如["正手","反手","发球","步伐","截击","战术"]
   createdAt: string
 }
 
@@ -29,7 +30,8 @@ export interface TechniqueNote {
   title: string                // 动作名称，如"正手击球"
   content: string              // 详细说明
   source: 'ai' | 'user'       // ai=AI生成，user=用户自己写
-  tags?: string[]
+  category?: string            // 技术分类，来自所属运动的 categories
+  tags?: string[]              // 细节标签，最多3个
   votes: number                // 实用性 +1 计数
   createdAt: string
   updatedAt: string

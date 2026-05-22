@@ -11,30 +11,6 @@ function today(): string {
 
 const DURATION_PRESETS = [30, 45, 60, 90, 120]
 
-function getPresetTags(sportName: string): string[] {
-  const lower = sportName.toLowerCase()
-  if (lower.includes('网球') || lower.includes('tennis')) {
-    return ['正手', '反手', '发球', '步伐', '截击', '比赛']
-  }
-  if (lower.includes('篮球') || lower.includes('basketball')) {
-    return ['投篮', '运球', '防守', '体能', '战术', '比赛']
-  }
-  if (lower.includes('足球') || lower.includes('soccer') || lower.includes('football')) {
-    return ['射门', '传球', '盘带', '防守', '体能', '比赛']
-  }
-  if (lower.includes('羽毛球') || lower.includes('badminton')) {
-    return ['高远球', '杀球', '网前', '步伐', '体能', '比赛']
-  }
-  if (lower.includes('游泳') || lower.includes('swim')) {
-    return ['自由泳', '蛙泳', '仰泳', '蝶泳', '体能', '技术']
-  }
-  if (lower.includes('跑步') || lower.includes('run')) {
-    return ['长跑', '间歇跑', '冲刺', '体能', '拉伸', '恢复']
-  }
-  // 通用标签
-  return ['技术', '体能', '战术', '比赛', '专项', '基础']
-}
-
 interface FormState {
   date: string
   duration: string
@@ -51,7 +27,8 @@ export default function RecordPage() {
   const editId = searchParams.get('edit')
   const dateParam = searchParams.get('date')
 
-  const PRESET_TAGS = getPresetTags(sport.name)
+  // 使用运动的 categories 作为预设标签，没有则降级到空数组
+  const PRESET_TAGS = sport.categories ?? []
 
   const [form, setForm] = useState<FormState>({
     date: dateParam ?? today(),
