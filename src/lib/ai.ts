@@ -112,9 +112,18 @@ async function callAPI(config: AIConfig, opts: CallOptions): Promise<string> {
   }
   const data = await res.json() as Record<string, unknown>
   // Anthropic: content is array of blocks
-  if (Array.isArray(data.content)) {
-    const text = (data.content as Array<{ type: string; text: string }>).find(b => b.type === 'text')?.text
-    if (text !== undefined) return text
+  if (Array.isArray(data.content) && data.content.length > 0) {
+    const blocks = data.content as Array<Record<string, unknown>>
+    // standard: find text block
+    const textBlock = blocks.find(b => b.type === 'text')
+    if (textBlock?.text !== undefined) return textBlock.text as string
+    // fallback: first block with any text field
+    for (const b of blocks) {
+      if (typeof b.text === 'string') return b.text
+    }
+    // fallback: first block stringified
+    const first = blocks[0]
+    if (typeof first === 'string') return first
   }
   // Some proxies return content as a plain string
   if (typeof data.content === 'string' && data.content) return data.content
