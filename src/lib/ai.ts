@@ -1,0 +1,323 @@
+import type { TrainingRecord } from '../types'
+
+const CONFIG_KEY = 'ai_config'
+const LEGACY_KEY = 'claude_api_key'
+
+export interface AIConfig {
+  apiUrl: string
+  apiKey: string
+  model: string
+  format: 'anthropic' | 'openai'
+}
+
+const DEFAULTS: AIConfig = {
+  apiUrl: 'https://api.anthropic.com',
+  apiKey: '',
+  model: 'claude-sonnet-4-6',
+  format: 'anthropic',
+}
+
+export function getAIConfig(): AIConfig {
+  try {
+    const raw = localStorage.getItem(CONFIG_KEY)
+    if (raw) return { ...DEFAULTS, ...(JSON.parse(raw) as Partial<AIConfig>) }
+  } catch { /* ignore */ }
+  const legacyKey = localStorage.getItem(LEGACY_KEY) ?? ''
+  return { ...DEFAULTS, apiKey: legacyKey }
+}
+
+export function setAIConfig(config: Partial<AIConfig>): void {
+  const current = getAIConfig()
+  const next = { ...current, ...config }
+  if (!next.apiKey.trim()) next.apiKey = ''
+  localStorage.setItem(CONFIG_KEY, JSON.stringify(next))
+  localStorage.removeItem(LEGACY_KEY)
+}
+
+export function hasApiKey(): boolean {
+  return !!getAIConfig().apiKey
+}
+
+// ── URL / format helpers ─────────────────────────────────
+
+function resolveUrl(config: AIConfig): string {
+  const base = config.apiUrl.replace(/\/+$/, '')
+  if (base.includes('/v1/messages') || base.includes('/v1/chat/completions')) return base
+  return config.format === 'anthropic' ? `${base}/v1/messages` : `${base}/v1/chat/completions`
+}
+
+function isAnthropicFormat(config: AIConfig): boolean {
+  return config.format === 'anthropic' || config.apiUrl.includes('anthropic.com')
+}
+
+function buildHeaders(config: AIConfig): Record<string, string> {
+  const h: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (isAnthropicFormat(config)) {
+    h['x-api-key'] = config.apiKey
+    h['anthropic-version'] = '2023-06-01'
+    h['anthropic-dangerous-direct-browser-access'] = 'true'
+  } else {
+    h['Authorization'] = `Bearer ${config.apiKey}`
+  }
+  return h
+}
+
+interface CallOptions {
+  max_tokens: number
+  system?: string
+  messages: Array<{ role: string; content: string }>
+  stream?: boolean
+}
+
+function buildBody(config: AIConfig, opts: CallOptions): Record<string, unknown> {
+  if (isAnthropicFormat(config)) {
+    return {
+      model: config.model,
+      max_tokens: opts.max_tokens,
+      ...(opts.stream ? { stream: true } : {}),
+      ...(opts.system ? { system: opts.system } : {}),
+      messages: opts.messages,
+    }
+  }
+  const messages = opts.system
+    ? [{ role: 'system', content: opts.system }, ...opts.messages]
+    : opts.messages
+  return {
+    model: config.model,
+    max_tokens: opts.max_tokens,
+    ...(opts.stream ? { stream: true } : {}),
+    messages,
+  }
+}
+
+async function doFetch(config: AIConfig, opts: CallOptions): Promise<Response> {
+  const url = resolveUrl(config)
+  if (!config.apiUrl.startsWith('http')) throw new Error('API URL 格式不正确，需以 http:// 或 https:// 开头')
+  try {
+    return await fetch(url, { method: 'POST', headers: buildHeaders(config), body: JSON.stringify(buildBody(config, opts)) })
+  } catch {
+    throw new Error(`无法连接到 API（${url}）\n可能原因：\n① 转接服务不支持浏览器直接访问（CORS 限制）\n② URL 填写有误\n③ 网络问题`)
+  }
+}
+
+// ── Non-streaming call (used by polishText) ──────────────
+
+async function callAPI(config: AIConfig, opts: CallOptions): Promise<string> {
+  const res = await doFetch(config, opts)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    const msg = (err as { error?: { message?: string } }).error?.message
+    throw new Error(msg ?? `API 错误 ${res.status}`)
+  }
+  const data = await res.json() as Record<string, unknown>
+  if (Array.isArray(data.content)) {
+    const text = (data.content as Array<{ type: string; text: string }>).find(b => b.type === 'text')?.text
+    if (text !== undefined) return text
+  }
+  if (Array.isArray(data.choices)) {
+    const text = (data.choices as Array<{ message: { content: string } }>)[0]?.message?.content
+    if (text !== undefined) return text
+  }
+  throw new Error('API 返回格式无法识别，请检查 API URL 是否正确')
+}
+
+// ── Polish ───────────────────────────────────────────────
+
+export async function polishText(content: string, reflection: string): Promise<{ content: string; reflection: string }> {
+  const config = getAIConfig()
+  const prompt = `你是一个运动训练日记润色助手。请对以下训练记录进行润色，让文字更流畅、生动，保留原意和所有具体细节，不要添加不存在的内容。
+
+训练内容：
+${content}
+
+${reflection ? `感悟：\n${reflection}` : ''}
+
+请按以下 JSON 格式返回，不要有其他内容：
+{"content":"润色后的训练内容","reflection":"润色后的感悟"}`
+
+  const data = await callAPI(config, { max_tokens: 1024, messages: [{ role: 'user', content: prompt }] })
+  try {
+    return JSON.parse(data) as { content: string; reflection: string }
+  } catch {
+    throw new Error('AI 返回格式异常，请重试')
+  }
+}
+
+// ── Chat messages ────────────────────────────────────────
+
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  createdAt: string
+}
+
+// ── Conversations ────────────────────────────────────────
+
+export interface Conversation {
+  id: string
+  title: string
+  messages: ChatMessage[]
+  createdAt: string
+  updatedAt: string
+}
+
+const CONVERSATIONS_KEY = 'sport_conversations'
+const ACTIVE_CONV_KEY = 'sport_active_conv'
+const LEGACY_CHAT_KEY = 'sport_chat_history'
+
+export function getConversations(): Conversation[] {
+  try {
+    const raw = localStorage.getItem(CONVERSATIONS_KEY)
+    if (raw) return JSON.parse(raw) as Conversation[]
+  } catch { /* ignore */ }
+  // 迁移旧数据
+  try {
+    const legacy = localStorage.getItem(LEGACY_CHAT_KEY)
+    if (legacy) {
+      const msgs = JSON.parse(legacy) as ChatMessage[]
+      if (msgs.length > 0) {
+        const conv: Conversation = {
+          id: `conv-${Date.now()}`,
+          title: msgs.find(m => m.role === 'user')?.content.slice(0, 20) ?? '历史对话',
+          messages: msgs,
+          createdAt: msgs[0].createdAt,
+          updatedAt: msgs[msgs.length - 1].createdAt,
+        }
+        localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify([conv]))
+        localStorage.removeItem(LEGACY_CHAT_KEY)
+        return [conv]
+      }
+    }
+  } catch { /* ignore */ }
+  return []
+}
+
+export function saveConversation(conv: Conversation): void {
+  const list = getConversations()
+  const idx = list.findIndex(c => c.id === conv.id)
+  if (idx >= 0) list[idx] = conv
+  else list.unshift(conv)
+  localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(list))
+}
+
+export function deleteConversation(id: string): void {
+  const list = getConversations().filter(c => c.id !== id)
+  localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(list))
+}
+
+export function getActiveConvId(): string | null {
+  return localStorage.getItem(ACTIVE_CONV_KEY)
+}
+
+export function setActiveConvId(id: string): void {
+  localStorage.setItem(ACTIVE_CONV_KEY, id)
+}
+
+// ── System prompt ────────────────────────────────────────
+
+const SYSTEM_PROMPT = `你是一位专业的运动顾问，只回答与运动、健身、训练相关的问题。
+
+你的专长包括：运动技术指导、训练计划建议、运动损伤预防与恢复、体能训练、运动营养等。
+
+如果用户提问与运动无关，请礼貌地说明你只能回答运动相关问题，并引导用户提问运动话题。
+
+回答要简洁实用，结合用户的实际训练情况给出个性化建议。
+
+每次回答结束后，另起一行，以 "FOLLOWUP:" 开头，提供2-3个相关的后续问题，用 "|" 分隔，每个问题不超过15字。例如：
+FOLLOWUP: 如何改善正手击球？|发球练习有哪些方法？|如何提高步伐速度？`
+
+function buildContext(records: TrainingRecord[]): string {
+  if (records.length === 0) return ''
+  const lines = records.slice(0, 5).map(r => {
+    const parts = [r.date]
+    if (r.coach) parts.push(`教练${r.coach}`)
+    if (r.duration) parts.push(`${r.duration}分钟`)
+    return `- ${parts.join('，')}：${r.content.slice(0, 80)}`
+  })
+  return `\n\n用户最近的训练记录（供参考）：\n${lines.join('\n')}`
+}
+
+// ── Streaming chat ───────────────────────────────────────
+
+export async function streamChatMessage(
+  userMessage: string,
+  history: ChatMessage[],
+  records: TrainingRecord[],
+  onChunk: (text: string) => void,
+): Promise<void> {
+  const config = getAIConfig()
+  const opts: CallOptions = {
+    max_tokens: 1024,
+    stream: true,
+    system: SYSTEM_PROMPT + buildContext(records),
+    messages: [
+      ...history.map(m => ({ role: m.role, content: m.content })),
+      { role: 'user', content: userMessage },
+    ],
+  }
+
+  const res = await doFetch(config, opts)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    const msg = (err as { error?: { message?: string } }).error?.message
+    throw new Error(msg ?? `API 错误 ${res.status}`)
+  }
+
+  const reader = res.body?.getReader()
+  if (!reader) throw new Error('不支持流式输出')
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+  const anthropic = isAnthropicFormat(config)
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+      const data = line.slice(6).trim()
+      if (data === '[DONE]') return
+      try {
+        const json = JSON.parse(data) as Record<string, unknown>
+        let text = ''
+        if (anthropic) {
+          if (json.type === 'content_block_delta') {
+            const delta = json.delta as Record<string, unknown>
+            if (delta?.type === 'text_delta') text = (delta.text as string) ?? ''
+          }
+        } else {
+          const choices = json.choices as Array<{ delta: { content?: string } }>
+          text = choices?.[0]?.delta?.content ?? ''
+        }
+        if (text) onChunk(text)
+      } catch { /* ignore parse errors */ }
+    }
+  }
+}
+
+// ── Legacy non-streaming (kept for compatibility) ────────
+
+export async function sendChatMessage(
+  userMessage: string,
+  history: ChatMessage[],
+  records: TrainingRecord[],
+): Promise<string> {
+  const config = getAIConfig()
+  return callAPI(config, {
+    max_tokens: 1024,
+    system: SYSTEM_PROMPT + buildContext(records),
+    messages: [
+      ...history.map(m => ({ role: m.role, content: m.content })),
+      { role: 'user', content: userMessage },
+    ],
+  })
+}
+
+// Legacy chat history helpers (kept for any remaining references)
+export function getChatHistory(): ChatMessage[] { return [] }
+export function saveChatHistory(_messages: ChatMessage[]): void { /* migrated to conversations */ }
+export function clearChatHistory(): void { localStorage.removeItem(LEGACY_CHAT_KEY) }

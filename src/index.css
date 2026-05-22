@@ -1,0 +1,97 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #F7F7F3;
+  --color-card: #FFFFFF;
+  --color-primary: #9DC41A;
+  --color-primary-dark: #7A9E12;
+  --color-header-from: #1A2E1A;
+  --color-header-to: #2D4A1E;
+  --color-text: #111111;
+  --color-muted: #888888;
+  --color-border: #EBEBEB;
+
+  --font-sans: "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background-color: #F7F7F3;
+  color: #111111;
+  font-family: "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100svh;
+}
+
+.card-shadow {
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.card-shadow-lg {
+  box-shadow: 0 8px 32px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.header-gradient {
+  background: linear-gradient(135deg, #1A2E1A 0%, #2D4A1E 100%);
+}
+
+/* 隐藏滚动条但保留滚动功能 */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* 装饰圆浮动动画 - 碰撞弹开效果 */
+@keyframes float-1 {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  45% {
+    transform: translate(-120px, 80px) scale(1.1);
+  }
+  50% {
+    transform: translate(-130px, 85px) scale(0.95);
+  }
+  55% {
+    transform: translate(-120px, 80px) scale(1.1);
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+@keyframes float-2 {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  45% {
+    transform: translate(120px, -80px) scale(1.15);
+  }
+  50% {
+    transform: translate(130px, -85px) scale(0.9);
+  }
+  55% {
+    transform: translate(120px, -80px) scale(1.15);
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+.float-circle-1 {
+  animation: float-1 5s ease-in-out infinite;
+}
+
+.float-circle-2 {
+  animation: float-2 5s ease-in-out infinite;
+}
