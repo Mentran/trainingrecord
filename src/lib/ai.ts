@@ -111,15 +111,21 @@ async function callAPI(config: AIConfig, opts: CallOptions): Promise<string> {
     throw new Error(msg ?? `API 错误 ${res.status}`)
   }
   const data = await res.json() as Record<string, unknown>
+  // Anthropic: content is array of blocks
   if (Array.isArray(data.content)) {
     const text = (data.content as Array<{ type: string; text: string }>).find(b => b.type === 'text')?.text
     if (text !== undefined) return text
   }
+  // Some proxies return content as a plain string
+  if (typeof data.content === 'string' && data.content) return data.content
+  // OpenAI: choices array
   if (Array.isArray(data.choices)) {
     const text = (data.choices as Array<{ message: { content: string } }>)[0]?.message?.content
     if (text !== undefined) return text
   }
-  throw new Error('API 返回格式无法识别，请检查 API URL 是否正确')
+  // output field (some relay formats)
+  if (typeof data.output === 'string' && data.output) return data.output
+  throw new Error(`API 返回格式无法识别（收到字段：${Object.keys(data).join(', ')}）\n请检查 API URL 和格式设置是否正确`)
 }
 
 // ── Polish ───────────────────────────────────────────────
