@@ -2,6 +2,13 @@ import type { TrainingRecord } from '../types'
 
 const CONFIG_KEY = 'ai_config'
 const LEGACY_KEY = 'claude_api_key'
+const GENERATED_CACHE_KEY = 'technique_generated_cache'
+
+export interface GeneratedTechniqueCache {
+  sportId: string
+  items: GeneratedTechnique[]
+  generatedAt: string
+}
 
 export interface AIConfig {
   apiUrl: string
@@ -149,6 +156,22 @@ export interface GeneratedTechnique {
   title: string
   content: string
   tags: string[]
+}
+
+export function getGeneratedCache(sportId: string): GeneratedTechniqueCache | null {
+  try {
+    const raw = localStorage.getItem(GENERATED_CACHE_KEY)
+    if (!raw) return null
+    const cache = JSON.parse(raw) as GeneratedTechniqueCache
+    return cache.sportId === sportId ? cache : null
+  } catch {
+    return null
+  }
+}
+
+export function setGeneratedCache(sportId: string, items: GeneratedTechnique[]): void {
+  const cache: GeneratedTechniqueCache = { sportId, items, generatedAt: new Date().toISOString() }
+  localStorage.setItem(GENERATED_CACHE_KEY, JSON.stringify(cache))
 }
 
 export async function generateTechniques(

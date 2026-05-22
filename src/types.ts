@@ -30,6 +30,7 @@ export interface TechniqueNote {
   content: string              // 详细说明
   source: 'ai' | 'user'       // ai=AI生成，user=用户自己写
   tags?: string[]
+  votes: number                // 实用性 +1 计数
   createdAt: string
   updatedAt: string
 }

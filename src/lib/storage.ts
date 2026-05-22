@@ -152,6 +152,8 @@ export function getTechniques(sportId?: string): TechniqueNote[] {
     const raw = localStorage.getItem(TECHNIQUES_KEY)
     if (!raw) return []
     let notes = JSON.parse(raw) as TechniqueNote[]
+    // 迁移：旧数据没有 votes 字段
+    notes = notes.map(n => (n.votes !== undefined ? n : { ...n, votes: 0 }))
     if (sportId) notes = notes.filter(n => n.sportId === sportId)
     return notes
   } catch {
