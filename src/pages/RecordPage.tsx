@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { saveRecord, updateRecord, getRecords, getCoaches, getActiveSportId } from '../lib/storage'
+import { polishText, hasApiKey } from '../lib/ai'
 import PageHeader from '../components/PageHeader'
 import { useSport } from '../components/SportProvider'
 
@@ -64,6 +65,7 @@ export default function RecordPage() {
   const [errors, setErrors] = useState<Partial<FormState>>({})
   const [customDuration, setCustomDuration] = useState(false)
   const [tagInput, setTagInput] = useState('')
+  const [polishing, setPolishing] = useState(false)
 
   useEffect(() => {
     setCoaches(getCoaches())
@@ -102,6 +104,19 @@ export default function RecordPage() {
     if (!t || form.tags.includes(t)) { setTagInput(''); return }
     setForm(prev => ({ ...prev, tags: [...prev.tags, t] }))
     setTagInput('')
+  }
+
+  async function handlePolish() {
+    if (!form.content.trim() || polishing) return
+    setPolishing(true)
+    try {
+      const result = await polishText(form.content, form.reflection)
+      setForm(prev => ({ ...prev, content: result.content, reflection: result.reflection }))
+    } catch (e) {
+      alert((e as Error).message ?? 'AI 润色失败，请重试')
+    } finally {
+      setPolishing(false)
+    }
   }
 
   function validate(): boolean {
@@ -231,9 +246,27 @@ export default function RecordPage() {
 
         {/* 训练内容 */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">
-            训练内容 <span className="text-red-400 normal-case">*</span>
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">
+              训练内容 <span className="text-red-400 normal-case">*</span>
+            </label>
+            {hasApiKey() && (
+              <button
+                type="button"
+                onClick={handlePolish}
+                disabled={polishing || !form.content.trim()}
+                className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition disabled:opacity-40"
+                style={{ borderColor: sport.accentColor + '80', color: sport.accentColor }}
+              >
+                {polishing ? (
+                  <>
+                    <span className="inline-block w-3 h-3 border-2 rounded-full animate-spin" style={{ borderColor: sport.accentColor + '40', borderTopColor: sport.accentColor }} />
+                    润色中…
+                  </>
+                ) : '✦ AI 润色'}
+              </button>
+            )}
+          </div>
           <textarea
             rows={5}
             placeholder="今天练了什么？教练重点纠正了哪些动作？"

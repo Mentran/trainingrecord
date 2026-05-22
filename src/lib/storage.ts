@@ -1,8 +1,9 @@
-import type { TrainingRecord, Sport } from '../types'
+import type { TrainingRecord, Sport, TechniqueNote } from '../types'
 
 const RECORDS_KEY = 'tennis_records'
 const SPORTS_KEY = 'sports_list'
 const ACTIVE_SPORT_KEY = 'active_sport_id'
+const TECHNIQUES_KEY = 'technique_notes'
 
 export const DEFAULT_SPORT: Sport = {
   id: 'tennis',
@@ -145,3 +146,43 @@ export function importRecords(json: string): void {
   const data = JSON.parse(json)
   localStorage.setItem(RECORDS_KEY, JSON.stringify(data))
 }
+
+export function getTechniques(sportId?: string): TechniqueNote[] {
+  try {
+    const raw = localStorage.getItem(TECHNIQUES_KEY)
+    if (!raw) return []
+    let notes = JSON.parse(raw) as TechniqueNote[]
+    if (sportId) notes = notes.filter(n => n.sportId === sportId)
+    return notes
+  } catch {
+    return []
+  }
+}
+
+export function saveTechnique(data: Omit<TechniqueNote, 'id' | 'createdAt' | 'updatedAt'>): TechniqueNote {
+  const notes = getTechniques()
+  const now = new Date().toISOString()
+  const note: TechniqueNote = { ...data, id: generateId(), createdAt: now, updatedAt: now }
+  notes.unshift(note)
+  localStorage.setItem(TECHNIQUES_KEY, JSON.stringify(notes))
+  return note
+}
+
+export function updateTechnique(id: string, data: Partial<Omit<TechniqueNote, 'id' | 'createdAt'>>): TechniqueNote | null {
+  const notes = getTechniques()
+  const index = notes.findIndex(n => n.id === id)
+  if (index === -1) return null
+  const updated: TechniqueNote = { ...notes[index], ...data, updatedAt: new Date().toISOString() }
+  notes[index] = updated
+  localStorage.setItem(TECHNIQUES_KEY, JSON.stringify(notes))
+  return updated
+}
+
+export function deleteTechnique(id: string): boolean {
+  const notes = getTechniques()
+  const filtered = notes.filter(n => n.id !== id)
+  if (filtered.length === notes.length) return false
+  localStorage.setItem(TECHNIQUES_KEY, JSON.stringify(filtered))
+  return true
+}
+

@@ -44,6 +44,19 @@ const tabs = [
     ),
   },
   {
+    to: '/techniques',
+    label: '技巧',
+    icon: (active: boolean) => (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <path d="M10 2.5a7.5 7.5 0 100 15 7.5 7.5 0 000-15z"
+          stroke="currentColor" strokeWidth="1.5"
+          fill={active ? 'currentColor' : 'none'} fillOpacity={active ? 0.12 : 0}
+        />
+        <path d="M10 6.5v4l2.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
+  {
     to: '/chat',
     label: '顾问',
     icon: (active: boolean) => (
@@ -53,20 +66,6 @@ const tabs = [
           fill={active ? 'currentColor' : 'none'} fillOpacity={active ? 0.12 : 0}
         />
         <path d="M7 8.5h6M7 11h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-      </svg>
-    ),
-  },
-  {
-    to: '/settings',
-    label: '设置',
-    icon: (active: boolean) => (
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-        <circle cx="10" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.5"
-          fill={active ? 'currentColor' : 'none'} fillOpacity={active ? 0.2 : 0}
-        />
-        <path d="M10 2v1.5M10 16.5V18M2 10h1.5M16.5 10H18M4.1 4.1l1.06 1.06M14.84 14.84l1.06 1.06M4.1 15.9l1.06-1.06M14.84 5.16l1.06-1.06"
-          stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"
-        />
       </svg>
     ),
   },

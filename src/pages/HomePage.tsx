@@ -59,6 +59,17 @@ export default function HomePage() {
         <div className="absolute -bottom-8 -left-8 w-32 h-32 rounded-full float-circle-2"
           style={{ background: sport.accentColor, opacity: circle2Opacity }} />
 
+        {/* 右上角设置按钮 */}
+        <button onClick={() => navigate('/settings')}
+          className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full z-10"
+          style={{ background: 'rgba(255,255,255,0.15)' }}>
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+            <circle cx="10" cy="10" r="2.5" stroke="white" strokeWidth="1.5"/>
+            <path d="M10 2v1.5M10 16.5V18M2 10h1.5M16.5 10H18M4.1 4.1l1.06 1.06M14.84 14.84l1.06 1.06M4.1 15.9l1.06-1.06M14.84 5.16l1.06-1.06"
+              stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        </button>
+
         {/* 多运动切换 */}
         {sports.length > 1 && (
           <div className="flex gap-2 mb-5 overflow-x-auto scrollbar-none pb-0.5">

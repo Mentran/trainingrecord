@@ -143,6 +143,47 @@ ${reflection ? `感悟：\n${reflection}` : ''}
   }
 }
 
+// ── Generate techniques ──────────────────────────────────
+
+export interface GeneratedTechnique {
+  title: string
+  content: string
+  tags: string[]
+}
+
+export async function generateTechniques(
+  records: TrainingRecord[],
+  sportName: string,
+): Promise<GeneratedTechnique[]> {
+  const config = getAIConfig()
+  if (records.length === 0) throw new Error('暂无训练记录，无法生成技巧')
+
+  const recordSummary = records.slice(0, 10).map(r =>
+    `[${r.date}] ${r.content}${r.reflection ? `\n感悟：${r.reflection}` : ''}`
+  ).join('\n\n')
+
+  const prompt = `你是一位专业的${sportName}教练。请根据以下训练记录，提炼出3-5条具体的技术要点或经验总结。
+
+要求：
+- 每条针对一个具体动作或技术环节
+- 内容简洁实用，80字以内
+- 标签选自训练记录中提到的技术点
+
+训练记录：
+${recordSummary}
+
+请严格按以下 JSON 数组格式返回，不要有其他内容：
+[{"title":"动作名称","content":"技术要点说明","tags":["标签1","标签2"]}]`
+
+  const data = await callAPI(config, { max_tokens: 1500, messages: [{ role: 'user', content: prompt }] })
+  try {
+    const cleaned = data.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
+    return JSON.parse(cleaned) as GeneratedTechnique[]
+  } catch {
+    throw new Error('AI 返回格式异常，请重试')
+  }
+}
+
 // ── Chat messages ────────────────────────────────────────
 
 export interface ChatMessage {
@@ -216,16 +257,18 @@ export function setActiveConvId(id: string): void {
 
 // ── System prompt ────────────────────────────────────────
 
-const SYSTEM_PROMPT = `你是一位专业的运动顾问，只回答与运动、健身、训练相关的问题。
+function buildSystemPrompt(sportName: string): string {
+  return `你是一位专业的${sportName}运动顾问，只回答与${sportName}训练相关的问题。
 
-你的专长包括：运动技术指导、训练计划建议、运动损伤预防与恢复、体能训练、运动营养等。
+你的专长包括：${sportName}技术指导、训练计划建议、运动损伤预防与恢复、体能训练、运动营养等。
 
-如果用户提问与运动无关，请礼貌地说明你只能回答运动相关问题，并引导用户提问运动话题。
+如果用户提问与${sportName}或运动无关，请礼貌地说明你只能回答${sportName}相关问题，并引导用户提问相关话题。
 
 回答要简洁实用，结合用户的实际训练情况给出个性化建议。
 
 每次回答结束后，另起一行，以 "FOLLOWUP:" 开头，提供2-3个相关的后续问题，用 "|" 分隔，每个问题不超过15字。例如：
 FOLLOWUP: 如何改善正手击球？|发球练习有哪些方法？|如何提高步伐速度？`
+}
 
 function buildContext(records: TrainingRecord[]): string {
   if (records.length === 0) return ''
@@ -245,12 +288,13 @@ export async function streamChatMessage(
   history: ChatMessage[],
   records: TrainingRecord[],
   onChunk: (text: string) => void,
+  sportName = '运动',
 ): Promise<void> {
   const config = getAIConfig()
   const opts: CallOptions = {
     max_tokens: 1024,
     stream: true,
-    system: SYSTEM_PROMPT + buildContext(records),
+    system: buildSystemPrompt(sportName) + buildContext(records),
     messages: [
       ...history.map(m => ({ role: m.role, content: m.content })),
       { role: 'user', content: userMessage },
@@ -309,7 +353,7 @@ export async function sendChatMessage(
   const config = getAIConfig()
   return callAPI(config, {
     max_tokens: 1024,
-    system: SYSTEM_PROMPT + buildContext(records),
+    system: buildSystemPrompt('运动') + buildContext(records),
     messages: [
       ...history.map(m => ({ role: m.role, content: m.content })),
       { role: 'user', content: userMessage },

@@ -22,3 +22,14 @@ export interface Sport {
   accentColor: string          // 强调色 hex（亮色，用于 badge/按钮）
   createdAt: string
 }
+
+export interface TechniqueNote {
+  id: string
+  sportId: string
+  title: string                // 动作名称，如"正手击球"
+  content: string              // 详细说明
+  source: 'ai' | 'user'       // ai=AI生成，user=用户自己写
+  tags?: string[]
+  createdAt: string
+  updatedAt: string
+}

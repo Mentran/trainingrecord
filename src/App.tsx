@@ -9,6 +9,7 @@ import CalendarPage from './pages/CalendarPage'
 import SettingsPage from './pages/SettingsPage'
 import DetailPage from './pages/DetailPage'
 import ChatPage from './pages/ChatPage'
+import TechniquePage from './pages/TechniquePage'
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
             <Route path="/list" element={<ListPage />} />
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/chat" element={<ChatPage />} />
+            <Route path="/techniques" element={<TechniquePage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/detail/:id" element={<DetailPage />} />
           </Routes>

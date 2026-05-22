@@ -178,7 +178,7 @@ export default function ChatPage() {
       await streamChatMessage(content, messages, records, (chunk) => {
         streamingRef.current += chunk
         setStreamingText(streamingRef.current)
-      })
+      }, sport.name)
 
       const { clean, followUps: fups } = parseFollowUps(streamingRef.current)
       const assistantMsg: ChatMessage = { id: generateId(), role: 'assistant', content: clean, createdAt: new Date().toISOString() }
