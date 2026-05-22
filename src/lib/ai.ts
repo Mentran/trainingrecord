@@ -236,7 +236,7 @@ export async function generateSportCategories(sportName: string): Promise<string
 请严格按 JSON 数组格式返回，不要有其他内容：
 ["分类1","分类2","分类3"]`
 
-  const data = await callAPI(config, { max_tokens: 200, messages: [{ role: 'user', content: prompt }] })
+  const data = await callAPI(config, { max_tokens: 512, messages: [{ role: 'user', content: prompt }] })
   try {
     const cleaned = data.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
     return JSON.parse(cleaned) as string[]
