@@ -181,18 +181,21 @@ export default function TechniquePage() {
                   ? { background: sport.accentColor, color: '#fff', borderColor: sport.accentColor }
                   : { background: 'white', color: '#6B7280', borderColor: '#E8E8E2' }
                 }>
-                全部
+                全部 {notes.length > 0 && <span className="opacity-70">{notes.length}</span>}
               </button>
-              {categories.map(c => (
-                <button key={c} onClick={() => setCategoryFilter(c === categoryFilter ? '' : c)}
-                  className="shrink-0 px-3 py-1 rounded-full text-xs font-medium border transition"
-                  style={categoryFilter === c
-                    ? { background: sport.accentColor, color: '#fff', borderColor: sport.accentColor }
-                    : { background: 'white', color: '#6B7280', borderColor: '#E8E8E2' }
-                  }>
-                  {c}
-                </button>
-              ))}
+              {categories.map(c => {
+                const count = notes.filter(n => n.category === c).length
+                return (
+                  <button key={c} onClick={() => setCategoryFilter(c === categoryFilter ? '' : c)}
+                    className="shrink-0 px-3 py-1 rounded-full text-xs font-medium border transition"
+                    style={categoryFilter === c
+                      ? { background: sport.accentColor, color: '#fff', borderColor: sport.accentColor }
+                      : { background: 'white', color: '#6B7280', borderColor: '#E8E8E2' }
+                    }>
+                    {c}{count > 0 && <span className="opacity-70 ml-0.5">{count}</span>}
+                  </button>
+                )
+              })}
             </div>
           )}
 
