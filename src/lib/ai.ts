@@ -1,4 +1,4 @@
-import type { TrainingRecord } from '../types'
+import type { TrainingRecord, TechniqueNote } from '../types'
 
 const CONFIG_KEY = 'ai_config'
 const LEGACY_KEY = 'claude_api_key'
@@ -387,15 +387,30 @@ function buildSystemPrompt(sportName: string): string {
 FOLLOWUP: 如何改善正手击球？|发球练习有哪些方法？|如何提高步伐速度？`
 }
 
-function buildContext(records: TrainingRecord[]): string {
-  if (records.length === 0) return ''
-  const lines = records.slice(0, 5).map(r => {
-    const parts = [r.date]
-    if (r.coach) parts.push(`教练${r.coach}`)
-    if (r.duration) parts.push(`${r.duration}分钟`)
-    return `- ${parts.join('，')}：${r.content.slice(0, 80)}`
-  })
-  return `\n\n用户最近的训练记录（供参考）：\n${lines.join('\n')}`
+function buildContext(records: TrainingRecord[], techniques: TechniqueNote[]): string {
+  const parts: string[] = []
+
+  if (records.length > 0) {
+    const lines = records.slice(0, 8).map(r => {
+      const meta = [r.date]
+      if (r.coach) meta.push(`教练${r.coach}`)
+      if (r.duration) meta.push(`${r.duration}分钟`)
+      if (r.tags?.length) meta.push(r.tags.join('/'))
+      const reflection = r.reflection ? `\n  感悟：${r.reflection}` : ''
+      return `- ${meta.join('，')}：${r.content}${reflection}`
+    })
+    parts.push(`用户最近的训练记录：\n${lines.join('\n')}`)
+  }
+
+  if (techniques.length > 0) {
+    const lines = techniques.slice(0, 10).map(n => {
+      const cat = n.category ? `[${n.category}] ` : ''
+      return `- ${cat}${n.title}：${n.content}`
+    })
+    parts.push(`用户已积累的技巧笔记（代表其当前技术水平）：\n${lines.join('\n')}`)
+  }
+
+  return parts.length > 0 ? '\n\n' + parts.join('\n\n') : ''
 }
 
 // ── Streaming chat ───────────────────────────────────────
@@ -404,6 +419,7 @@ export async function streamChatMessage(
   userMessage: string,
   history: ChatMessage[],
   records: TrainingRecord[],
+  techniques: TechniqueNote[],
   onChunk: (text: string) => void,
   sportName = '运动',
 ): Promise<void> {
@@ -411,7 +427,7 @@ export async function streamChatMessage(
   const opts: CallOptions = {
     max_tokens: 1024,
     stream: true,
-    system: buildSystemPrompt(sportName) + buildContext(records),
+    system: buildSystemPrompt(sportName) + buildContext(records, techniques),
     messages: [
       ...history.map(m => ({ role: m.role, content: m.content })),
       { role: 'user', content: userMessage },
@@ -470,7 +486,7 @@ export async function sendChatMessage(
   const config = getAIConfig()
   return callAPI(config, {
     max_tokens: 1024,
-    system: buildSystemPrompt('运动') + buildContext(records),
+    system: buildSystemPrompt('运动') + buildContext(records, []),
     messages: [
       ...history.map(m => ({ role: m.role, content: m.content })),
       { role: 'user', content: userMessage },

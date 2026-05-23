@@ -5,7 +5,7 @@ import {
   deleteConversation, getActiveConvId, setActiveConvId,
   type ChatMessage, type Conversation,
 } from '../lib/ai'
-import { getRecords } from '../lib/storage'
+import { getRecords, getTechniques } from '../lib/storage'
 import { useSport } from '../components/SportProvider'
 
 function generateId() {
@@ -174,8 +174,9 @@ export default function ChatPage() {
     setStreamingText('')
 
     try {
-      const records = getRecords()
-      await streamChatMessage(content, messages, records, (chunk) => {
+      const records = getRecords(sport.id)
+      const techniques = getTechniques(sport.id)
+      await streamChatMessage(content, messages, records, techniques, (chunk) => {
         streamingRef.current += chunk
         setStreamingText(streamingRef.current)
       }, sport.name)
