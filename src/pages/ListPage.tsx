@@ -114,19 +114,33 @@ export default function ListPage() {
         {/* 统计数字 */}
         <div className="relative grid grid-cols-3 gap-3">
           {[
-            { value: totalSessions, unit: '次', label: '训练' },
-            { value: totalHours, unit: 'h', label: '总时长' },
-            { value: totalCoaches, unit: '位', label: '教练' },
-          ].map(stat => (
-            <div key={stat.label} className="rounded-2xl p-3.5 text-center"
-              style={{ background: 'rgba(255,255,255,0.12)' }}>
-              <div className="flex items-end justify-center gap-0.5 mb-0.5">
-                <span className="text-[32px] font-bold text-white leading-none">{stat.value}</span>
-                <span className="text-white/60 text-sm mb-1">{stat.unit}</span>
+            { value: totalSessions, unit: '次', label: '训练', to: '/calendar?view=month' },
+            { value: totalHours, unit: 'h', label: '总时长', to: '/calendar?view=stats' },
+            { value: totalCoaches, unit: '位', label: '教练', to: null },
+          ].map(stat => {
+            const inner = (
+              <>
+                <div className="flex items-end justify-center gap-0.5 mb-0.5">
+                  <span className="text-[32px] font-bold text-white leading-none">{stat.value}</span>
+                  <span className="text-white/60 text-sm mb-1">{stat.unit}</span>
+                </div>
+                <p className="text-white/40 text-xs">{stat.label}</p>
+                {stat.to && <div className="absolute top-2 right-2 w-1 h-1 rounded-full bg-white/30" />}
+              </>
+            )
+            return stat.to ? (
+              <button key={stat.label} onClick={() => navigate(stat.to!)}
+                className="relative rounded-2xl p-3.5 text-center active:scale-95 transition-transform"
+                style={{ background: 'rgba(255,255,255,0.12)' }}>
+                {inner}
+              </button>
+            ) : (
+              <div key={stat.label} className="relative rounded-2xl p-3.5 text-center"
+                style={{ background: 'rgba(255,255,255,0.12)' }}>
+                {inner}
               </div>
-              <p className="text-white/40 text-xs">{stat.label}</p>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 

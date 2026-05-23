@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { getRecords, getCoaches } from '../lib/storage'
 import type { TrainingRecord } from '../types'
 import TrainingCard, { getCoachColor } from '../components/TrainingCard'
@@ -184,9 +184,13 @@ function CoachBreakdown({ data }: { data: { coach: string; count: number; pct: n
 export default function CalendarPage() {
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
   const { sport } = useSport()
   const now = new Date()
-  const [view, setView] = useState<'month' | 'year' | 'stats'>('month')
+  const [view, setView] = useState<'month' | 'year' | 'stats'>(() => {
+    const v = searchParams.get('view')
+    return (v === 'stats' || v === 'year' || v === 'month') ? v : 'month'
+  })
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth())
   const [records, setRecords] = useState<TrainingRecord[]>([])
