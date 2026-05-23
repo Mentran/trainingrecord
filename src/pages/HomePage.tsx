@@ -143,7 +143,7 @@ export default function HomePage() {
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-xs font-semibold text-[#ADADAD] uppercase tracking-widest">最近训练</h2>
               {records.length > 3 && (
-                <button onClick={() => navigate('/list')}
+                <button onClick={() => navigate('/')}
                   className="text-xs font-semibold" style={{ color: sport.accentColor }}>
                   全部 {records.length} 条 →
                 </button>

@@ -26,7 +26,7 @@ export default function DetailPage() {
     return (
       <div className="p-4 flex flex-col items-center justify-center min-h-64 gap-3">
         <p className="text-[#6B7280]">记录不存在</p>
-        <button onClick={() => navigate('/list')} className="text-sm font-medium" style={{ color: sport.accentColor }}>返回列表</button>
+        <button onClick={() => navigate('/')} className="text-sm font-medium" style={{ color: sport.accentColor }}>返回列表</button>
       </div>
     )
   }
@@ -38,7 +38,7 @@ export default function DetailPage() {
     if (!confirm('确定删除这条记录？')) return
     deleteRecord(record!.id)
     showToast('已删除')
-    navigate('/list')
+    navigate('/')
   }
 
   async function handlePolish() {
