@@ -124,7 +124,7 @@ export default function RecordPage() {
     } else {
       saveRecord(data)
     }
-    navigate('/list')
+    navigate('/')
   }
 
   const inputClass = (hasError?: string) =>
