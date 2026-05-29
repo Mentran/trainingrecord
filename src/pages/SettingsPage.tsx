@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
-import { exportAll, validateBackup, importBackup, saveSport, updateSport, deleteSport, DEFAULT_SPORT, SPORT_CATEGORY_PRESETS } from '../lib/storage'
-import { getAIConfig, setAIConfig, hasApiKey, generateSportCategories, categorizeTechniques, type AIConfig } from '../lib/ai'
-import { getTechniques, updateTechnique } from '../lib/storage'
+import { exportAll, validateBackup, importBackup, saveSport, updateSport, deleteSport, DEFAULT_SPORT, SPORT_CATEGORY_PRESETS, DEFAULT_EXPORT_OPTIONS, type AppBackup, type ExportOptions } from '../lib/storage'
+import { getAIConfig, setAIConfig, hasApiKey, generateSportCategories, categorizeTechniques, getConversations, type AIConfig } from '../lib/ai'
+import { getRecords, getTechniques, updateTechnique } from '../lib/storage'
 import { useToast } from '../components/ToastProvider'
 import { useSport } from '../components/SportProvider'
 import PageHeader from '../components/PageHeader'
@@ -24,6 +24,14 @@ interface AddSportForm {
   colorIndex: number
 }
 
+interface PendingImport {
+  json: string
+  summary: string
+  options: ExportOptions
+  available: ExportOptions
+  counts: Record<keyof ExportOptions, number>
+}
+
 export default function SettingsPage() {
   const { showToast } = useToast()
   const { sports, switchSport, refreshSports, sport: activeSport } = useSport()
@@ -40,9 +48,17 @@ export default function SettingsPage() {
   const [categoryDraft, setCategoryDraft] = useState<string[]>([])
   const [categoryInput, setCategoryInput] = useState('')
   const [categorizingId, setCategorizingId] = useState<string | null>(null)
+  const [exportOptions, setExportOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS)
+  const [showExportOptions, setShowExportOptions] = useState(false)
+  const [pendingImport, setPendingImport] = useState<PendingImport | null>(null)
 
   function handleExport() {
-    const json = exportAll()
+    const selectedCount = Object.values(exportOptions).filter(Boolean).length
+    if (selectedCount === 0) {
+      showToast('请至少选择一类数据', 'error')
+      return
+    }
+    const json = exportAll(exportOptions)
     const blob = new Blob([json], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -50,7 +66,15 @@ export default function SettingsPage() {
     a.download = `training-backup-${new Date().toISOString().slice(0, 10)}.json`
     a.click()
     URL.revokeObjectURL(url)
-    showToast('已导出完整备份')
+    showToast(selectedCount === 4 ? '已导出完整备份' : '已导出所选数据')
+  }
+
+  function toggleExportOption(key: keyof ExportOptions) {
+    setExportOptions(prev => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  function toggleExportOptions() {
+    setShowExportOptions(prev => !prev)
   }
 
   function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -64,12 +88,48 @@ export default function SettingsPage() {
         showToast(check.error ?? '导入失败', 'error')
         return
       }
-      if (!confirm(`导入将覆盖现有数据：${check.summary}。确认继续？`)) return
-      importBackup(text)
-      showToast('导入成功，请刷新页面')
+      const parsed = JSON.parse(text) as AppBackup | unknown[]
+      const available: ExportOptions = {
+        records: Array.isArray(parsed) || Array.isArray(parsed.records),
+        techniques: !Array.isArray(parsed) && Array.isArray(parsed.techniques),
+        sports: !Array.isArray(parsed) && Array.isArray(parsed.sports),
+        conversations: !Array.isArray(parsed) && Array.isArray(parsed.conversations),
+      }
+      const counts: Record<keyof ExportOptions, number> = {
+        records: Array.isArray(parsed) ? parsed.length : parsed.records?.length ?? 0,
+        techniques: !Array.isArray(parsed) ? parsed.techniques?.length ?? 0 : 0,
+        sports: !Array.isArray(parsed) ? parsed.sports?.length ?? 0 : 0,
+        conversations: !Array.isArray(parsed) ? parsed.conversations?.length ?? 0 : 0,
+      }
+      setPendingImport({ json: text, summary: check.summary, options: available, available, counts })
     }
     reader.readAsText(file)
     e.target.value = ''
+  }
+
+  function toggleImportOption(key: keyof ExportOptions) {
+    setPendingImport(prev => {
+      if (!prev || !prev.available[key]) return prev
+      return { ...prev, options: { ...prev.options, [key]: !prev.options[key] } }
+    })
+  }
+
+  function handleConfirmImport() {
+    if (!pendingImport) return
+    const selectedCount = Object.values(pendingImport.options).filter(Boolean).length
+    if (selectedCount === 0) {
+      showToast('请至少选择一类数据', 'error')
+      return
+    }
+    const selectedLabels = importItems
+      .filter(item => pendingImport.options[item.key])
+      .map(item => item.label)
+      .join('、')
+    if (!confirm(`导入将覆盖所选数据：${selectedLabels}。确认继续？`)) return
+    importBackup(pendingImport.json, pendingImport.options)
+    setPendingImport(null)
+    refreshSports()
+    showToast('导入成功，请刷新页面')
   }
 
   function startEditAI() {
@@ -150,6 +210,19 @@ export default function SettingsPage() {
   const maskedKey = aiConfig.apiKey
     ? aiConfig.apiKey.slice(0, 8) + '••••••••' + aiConfig.apiKey.slice(-4)
     : ''
+
+  const exportItems: Array<{ key: keyof ExportOptions; label: string; desc: string }> = [
+    { key: 'records', label: '训练记录', desc: `${getRecords().length} 条` },
+    { key: 'techniques', label: '技巧笔记', desc: `${getTechniques().length} 条` },
+    { key: 'sports', label: '运动配置', desc: `${sports.length} 个运动` },
+    { key: 'conversations', label: '聊天记录', desc: `${getConversations().length} 组对话` },
+  ]
+  const importItems: Array<{ key: keyof ExportOptions; label: string; unit: string }> = [
+    { key: 'records', label: '训练记录', unit: '条' },
+    { key: 'techniques', label: '技巧笔记', unit: '条' },
+    { key: 'sports', label: '运动配置', unit: '个运动' },
+    { key: 'conversations', label: '聊天记录', unit: '组对话' },
+  ]
 
   return (
     <div className="pb-8">
@@ -483,10 +556,10 @@ export default function SettingsPage() {
         {/* 数据备份 */}
         <div>
           <p className="text-xs font-medium text-[#6B7280] uppercase tracking-wide mb-3">数据备份</p>
-          <div className="bg-white rounded-2xl card-shadow overflow-hidden divide-y divide-[#E8E8E2]">
+          <div className="bg-white rounded-2xl card-shadow overflow-hidden">
             <button
-              onClick={handleExport}
-              className="w-full flex items-center justify-between px-4 py-4 text-sm text-[#1A1A1A] active:bg-[#F5F5F0] transition"
+              onClick={toggleExportOptions}
+              className="w-full flex items-center justify-between px-4 py-4 text-sm text-[#1A1A1A] active:bg-[#F5F5F0] transition border-b border-[#E8E8E2]"
             >
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-xl bg-[#E8F5C8] flex items-center justify-center">
@@ -494,10 +567,55 @@ export default function SettingsPage() {
                     <path d="M8 2v8M5 7l3 3 3-3M3 12h10" stroke="#5A8A00" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </div>
-                <span>导出备份</span>
+                <span>导出记录</span>
               </div>
-              <span className="text-[#9B9B9B] text-xs">JSON →</span>
+              <span className="text-[#9B9B9B] text-xs">{showExportOptions ? '收起 ↑' : '选择 →'}</span>
             </button>
+            {showExportOptions && (
+              <div className="px-4 py-4 border-b border-[#E8E8E2] bg-[#FAFAF7]">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-medium text-[#1A1A1A]">选择导出内容</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {exportItems.map(item => {
+                    const checked = exportOptions[item.key]
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => toggleExportOption(item.key)}
+                        className={`text-left rounded-xl border px-3 py-2.5 transition ${
+                          checked ? 'border-[#9DC41A] bg-white' : 'border-[#E8E8E2] bg-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                              checked ? 'bg-[#9DC41A] border-[#9DC41A]' : 'border-[#D1D5DB]'
+                            }`}
+                          >
+                            {checked && (
+                              <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                                <path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            )}
+                          </span>
+                          <span className="text-sm font-medium text-[#1A1A1A]">{item.label}</span>
+                        </div>
+                        <p className="text-xs text-[#9B9B9B] mt-1 ml-6">{item.desc}</p>
+                      </button>
+                    )
+                  })}
+                </div>
+                <button
+                  onClick={handleExport}
+                  className="mt-3 w-full py-3 rounded-2xl text-sm text-white font-medium active:opacity-85 transition"
+                  style={{ background: activeSport.color }}
+                >
+                  导出所选数据
+                </button>
+              </div>
+            )}
             <button
               onClick={() => fileRef.current?.click()}
               className="w-full flex items-center justify-between px-4 py-4 text-sm text-[#1A1A1A] active:bg-[#F5F5F0] transition"
@@ -512,9 +630,67 @@ export default function SettingsPage() {
               </div>
               <span className="text-[#9B9B9B] text-xs">覆盖现有 →</span>
             </button>
+            {pendingImport && (
+              <div className="px-4 py-4 border-t border-[#E8E8E2] bg-[#FAFAF7]">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="text-sm font-medium text-[#1A1A1A]">选择导入内容</p>
+                    <p className="text-xs text-[#9B9B9B] mt-0.5">{pendingImport.summary}</p>
+                  </div>
+                  <button
+                    onClick={() => setPendingImport(null)}
+                    className="text-xs text-[#9B9B9B]"
+                  >
+                    取消
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {importItems.map(item => {
+                    const available = pendingImport.available[item.key]
+                    const checked = pendingImport.options[item.key]
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        disabled={!available}
+                        onClick={() => toggleImportOption(item.key)}
+                        className={`text-left rounded-xl border px-3 py-2.5 transition disabled:opacity-40 ${
+                          checked ? 'border-[#4A90D9] bg-white' : 'border-[#E8E8E2] bg-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                              checked ? 'bg-[#4A90D9] border-[#4A90D9]' : 'border-[#D1D5DB]'
+                            }`}
+                          >
+                            {checked && (
+                              <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                                <path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            )}
+                          </span>
+                          <span className="text-sm font-medium text-[#1A1A1A]">{item.label}</span>
+                        </div>
+                        <p className="text-xs text-[#9B9B9B] mt-1 ml-6">
+                          {available ? `${pendingImport.counts[item.key]} ${item.unit}` : '备份中没有'}
+                        </p>
+                      </button>
+                    )
+                  })}
+                </div>
+                <button
+                  onClick={handleConfirmImport}
+                  className="mt-3 w-full py-3 rounded-2xl text-sm text-white font-medium active:opacity-85 transition"
+                  style={{ background: '#4A90D9' }}
+                >
+                  导入所选数据
+                </button>
+              </div>
+            )}
           </div>
           <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
-          <p className="text-xs text-[#9B9B9B] mt-2 px-1">备份包含训练记录、技巧笔记和运动配置，建议定期导出。</p>
+          <p className="text-xs text-[#9B9B9B] mt-2 px-1">可按需导出训练记录、技巧笔记、运动配置和聊天记录，建议定期备份。</p>
         </div>
       </div>
 

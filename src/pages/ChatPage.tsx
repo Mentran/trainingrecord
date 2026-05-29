@@ -113,6 +113,7 @@ export default function ChatPage() {
   const [showHistory, setShowHistory] = useState(false)
 
   const streamingRef = useRef('')
+  const streamFlushTimerRef = useRef<number | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -128,6 +129,14 @@ export default function ChatPage() {
     el.style.height = 'auto'
     el.style.height = Math.min(el.scrollHeight, 128) + 'px'
   }, [input])
+
+  useEffect(() => {
+    return () => {
+      if (streamFlushTimerRef.current !== null) {
+        window.clearTimeout(streamFlushTimerRef.current)
+      }
+    }
+  }, [])
 
   function switchConversation(id: string) {
     const conv = conversations.find(c => c.id === id)
@@ -148,6 +157,14 @@ export default function ChatPage() {
     setStreamingText('')
     streamingRef.current = ''
     setShowHistory(false)
+  }
+
+  function flushStreamingText() {
+    if (streamFlushTimerRef.current !== null) return
+    streamFlushTimerRef.current = window.setTimeout(() => {
+      setStreamingText(streamingRef.current)
+      streamFlushTimerRef.current = null
+    }, 80)
   }
 
   function handleDeleteConv(id: string) {
@@ -178,9 +195,13 @@ export default function ChatPage() {
       const techniques = getTechniques(sport.id)
       await streamChatMessage(content, messages, records, techniques, (chunk) => {
         streamingRef.current += chunk
-        setStreamingText(streamingRef.current)
+        flushStreamingText()
       }, sport.name)
 
+      if (streamFlushTimerRef.current !== null) {
+        window.clearTimeout(streamFlushTimerRef.current)
+        streamFlushTimerRef.current = null
+      }
       const { clean, followUps: fups } = parseFollowUps(streamingRef.current)
       const assistantMsg: ChatMessage = { id: generateId(), role: 'assistant', content: clean, createdAt: new Date().toISOString() }
       const finalMessages = [...nextMessages, assistantMsg]
@@ -213,6 +234,10 @@ export default function ChatPage() {
       }
       setMessages(prev => [...prev, errMsg])
     } finally {
+      if (streamFlushTimerRef.current !== null) {
+        window.clearTimeout(streamFlushTimerRef.current)
+        streamFlushTimerRef.current = null
+      }
       setLoading(false)
       setStreamingText('')
       streamingRef.current = ''

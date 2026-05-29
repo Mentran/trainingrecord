@@ -64,7 +64,7 @@ export default function BottomNav() {
   return (
     <nav
       className="fixed bottom-3 left-3 right-3 max-w-lg mx-auto rounded-2xl flex z-30 overflow-hidden"
-      style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.08)', background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)' }}
+      style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.08)', background: 'rgba(255,255,255,0.98)' }}
     >
       {tabs.map(tab => {
         const active = tab.to === '/'

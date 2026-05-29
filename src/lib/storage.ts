@@ -1,9 +1,11 @@
+import type { Conversation } from './ai'
 import type { TrainingRecord, Sport, TechniqueNote } from '../types'
 
 const RECORDS_KEY = 'tennis_records'
 const SPORTS_KEY = 'sports_list'
 const ACTIVE_SPORT_KEY = 'active_sport_id'
 const TECHNIQUES_KEY = 'technique_notes'
+const CONVERSATIONS_KEY = 'sport_conversations'
 
 export const DEFAULT_SPORT: Sport = {
   id: 'tennis',
@@ -156,19 +158,44 @@ export function getCoaches(sportId?: string): string[] {
 export interface AppBackup {
   version: 2
   exportedAt: string
-  records: TrainingRecord[]
-  techniques: TechniqueNote[]
-  sports: Sport[]
+  records?: TrainingRecord[]
+  techniques?: TechniqueNote[]
+  sports?: Sport[]
+  conversations?: Conversation[]
 }
 
-export function exportAll(): string {
+export interface ExportOptions {
+  records: boolean
+  techniques: boolean
+  sports: boolean
+  conversations: boolean
+}
+
+export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
+  records: true,
+  techniques: true,
+  sports: true,
+  conversations: true,
+}
+
+function getConversationsForBackup(): Conversation[] {
+  try {
+    const raw = localStorage.getItem(CONVERSATIONS_KEY)
+    return raw ? (JSON.parse(raw) as Conversation[]) : []
+  } catch {
+    return []
+  }
+}
+
+export function exportAll(options: ExportOptions = DEFAULT_EXPORT_OPTIONS): string {
   const backup: AppBackup = {
     version: 2,
     exportedAt: new Date().toISOString(),
-    records: getRecords(),
-    techniques: getTechniques(),
-    sports: getSports(),
   }
+  if (options.records) backup.records = getRecords()
+  if (options.techniques) backup.techniques = getTechniques()
+  if (options.sports) backup.sports = getSports()
+  if (options.conversations) backup.conversations = getConversationsForBackup()
   return JSON.stringify(backup, null, 2)
 }
 
@@ -181,26 +208,28 @@ export function validateBackup(json: string): { valid: boolean; summary: string;
     }
     if (data.version !== 2) return { valid: false, summary: '', error: '不支持的备份格式' }
     const parts = [
-      `训练记录 ${data.records?.length ?? 0} 条`,
-      `技巧笔记 ${data.techniques?.length ?? 0} 条`,
-      `运动项目 ${data.sports?.length ?? 0} 个`,
+      data.records ? `训练记录 ${data.records.length} 条` : '',
+      data.techniques ? `技巧笔记 ${data.techniques.length} 条` : '',
+      data.sports ? `运动项目 ${data.sports.length} 个` : '',
+      data.conversations ? `聊天记录 ${data.conversations.length} 组` : '',
     ]
-    return { valid: true, summary: parts.join('，') }
+    return { valid: true, summary: parts.filter(Boolean).join('，') || '空备份' }
   } catch {
     return { valid: false, summary: '', error: 'JSON 解析失败' }
   }
 }
 
-export function importBackup(json: string): void {
+export function importBackup(json: string, options: ExportOptions = DEFAULT_EXPORT_OPTIONS): void {
   const data = JSON.parse(json) as AppBackup | TrainingRecord[]
   // 兼容旧格式（纯记录数组）
   if (Array.isArray(data)) {
-    localStorage.setItem(RECORDS_KEY, JSON.stringify(data))
+    if (options.records) localStorage.setItem(RECORDS_KEY, JSON.stringify(data))
     return
   }
-  if (data.records) localStorage.setItem(RECORDS_KEY, JSON.stringify(data.records))
-  if (data.techniques) localStorage.setItem(TECHNIQUES_KEY, JSON.stringify(data.techniques))
-  if (data.sports) localStorage.setItem(SPORTS_KEY, JSON.stringify(data.sports))
+  if (options.records && data.records) localStorage.setItem(RECORDS_KEY, JSON.stringify(data.records))
+  if (options.techniques && data.techniques) localStorage.setItem(TECHNIQUES_KEY, JSON.stringify(data.techniques))
+  if (options.sports && data.sports) localStorage.setItem(SPORTS_KEY, JSON.stringify(data.sports))
+  if (options.conversations && data.conversations) localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(data.conversations))
 }
 
 // 保留旧名称供外部兼容
@@ -251,4 +280,3 @@ export function deleteTechnique(id: string): boolean {
   localStorage.setItem(TECHNIQUES_KEY, JSON.stringify(filtered))
   return true
 }
-
