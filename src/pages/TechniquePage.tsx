@@ -43,6 +43,8 @@ export default function TechniquePage() {
   const [importText, setImportText] = useState('')
   const [importing, setImporting] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [editingDraftIdx, setEditingDraftIdx] = useState<number | null>(null)
+  const [draftEdit, setDraftEdit] = useState<EditState>(EMPTY_EDIT)
 
   const reload = useCallback(() => {
     setNotes(getTechniques(sport.id))
@@ -59,6 +61,15 @@ export default function TechniquePage() {
   }, [sport.id])
 
   const categories = sport.categories ?? []
+  const normalizeDraftTags = (tags: string[]) => {
+    const next = tags
+      .flatMap(t => t.split(/[,，、/\s]+/))
+      .map(t => t.trim())
+      .filter(Boolean)
+      .filter((t, i, arr) => arr.indexOf(t) === i)
+      .slice(0, 2)
+    return next.length > 0 ? next : ['动作要点']
+  }
   const filteredNotes = notes
     .filter(n => !categoryFilter || n.category === categoryFilter)
     .filter(n => {
@@ -75,7 +86,7 @@ export default function TechniquePage() {
     setGenerating(true)
     try {
       const records = getRecords(sport.id)
-      const result = await generateTechniques(records, sport.name)
+      const result = await generateTechniques(records, sport.name, categories)
       const next = [...result, ...generated.filter(g => !result.some(r => r.title === g.title))]
       setGenerated(next)
       setGeneratedCache(sport.id, next)
@@ -90,7 +101,7 @@ export default function TechniquePage() {
     if (!importText.trim()) return
     setImporting(true)
     try {
-      const result = await parseExperienceText(importText, sport.name)
+      const result = await parseExperienceText(importText, sport.name, categories)
       const next = [...result, ...generated.filter(g => !result.some(r => r.title === g.title))]
       setGenerated(next)
       setGeneratedCache(sport.id, next)
@@ -106,7 +117,15 @@ export default function TechniquePage() {
   function handleCollect(item: GeneratedTechnique, idx: number) {
     setCollectingIdx(idx)
     setTimeout(() => {
-      saveTechnique({ sportId: sport.id, title: item.title, content: item.content, tags: item.tags, source: 'user', votes: 0 })
+      saveTechnique({
+        sportId: sport.id,
+        title: item.title,
+        content: item.content,
+        category: item.category ?? categories[0],
+        tags: normalizeDraftTags(item.tags ?? []),
+        source: 'ai',
+        votes: 0,
+      })
       const next = generated.filter((_, i) => i !== idx)
       setGenerated(next)
       setGeneratedCache(sport.id, next)
@@ -114,6 +133,35 @@ export default function TechniquePage() {
       reload()
       setTab('user')
     }, 380)
+  }
+
+  function openDraftEdit(item: GeneratedTechnique, idx: number) {
+    setEditingDraftIdx(idx)
+    setDraftEdit({
+      title: item.title,
+      content: item.content,
+      category: item.category ?? '',
+      tags: (item.tags ?? []).join('、'),
+    })
+  }
+
+  function saveDraftEdit() {
+    if (editingDraftIdx === null || !draftEdit.title.trim() || !draftEdit.content.trim()) return
+    const tags = normalizeDraftTags(draftEdit.tags.split(/[,，、\s]+/))
+    const next = generated.map((item, idx) => idx === editingDraftIdx
+      ? {
+          ...item,
+          title: draftEdit.title.trim(),
+          content: draftEdit.content.trim(),
+          category: draftEdit.category || categories[0],
+          tags,
+        }
+      : item
+    )
+    setGenerated(next)
+    setGeneratedCache(sport.id, next)
+    setEditingDraftIdx(null)
+    setDraftEdit(EMPTY_EDIT)
   }
 
   function handleVote(id: string, current: number) {
@@ -332,24 +380,35 @@ export default function TechniquePage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-[#1A1A1A]">{item.title}</p>
                       <p className="text-xs text-[#6B7280] mt-1 leading-relaxed">{item.content}</p>
-                      {item.tags?.length > 0 && (
+                      {(item.category || item.tags?.length > 0) && (
                         <div className="flex gap-1 mt-2 flex-wrap">
-                          {item.tags.map(t => (
+                          {item.category && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                              style={{ background: sport.accentColor + '30', color: sport.accentColor }}>{item.category}</span>
+                          )}
+                          {(item.tags ?? []).map(t => (
                             <span key={t} className="text-[10px] px-2 py-0.5 rounded-full"
                               style={{ background: sport.accentColor + '20', color: sport.accentColor }}>{t}</span>
                           ))}
                         </div>
                       )}
                     </div>
-                    <button onClick={() => handleCollect(item, i)} disabled={collectingIdx !== null}
-                      className="shrink-0 flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-xl transition active:scale-95 disabled:opacity-50"
-                      style={{ background: sport.accentColor + '18', color: sport.accentColor }}>
-                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                        <path d="M3 2h7a1 1 0 011 1v8.5l-4.5-2.5L2 11.5V3a1 1 0 011-1z"
-                          stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
-                      </svg>
-                      收藏
-                    </button>
+                    <div className="shrink-0 flex flex-col gap-1.5">
+                      <button onClick={() => openDraftEdit(item, i)} disabled={collectingIdx !== null}
+                        className="flex items-center justify-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-xl border transition active:scale-95 disabled:opacity-50"
+                        style={{ borderColor: sport.accentColor + '40', color: sport.accentColor, background: '#fff' }}>
+                        编辑
+                      </button>
+                      <button onClick={() => handleCollect(item, i)} disabled={collectingIdx !== null}
+                        className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-xl transition active:scale-95 disabled:opacity-50"
+                        style={{ background: sport.accentColor + '18', color: sport.accentColor }}>
+                        <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                          <path d="M3 2h7a1 1 0 011 1v8.5l-4.5-2.5L2 11.5V3a1 1 0 011-1z"
+                            stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+                        </svg>
+                        收藏
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -431,6 +490,74 @@ export default function TechniquePage() {
                 className="flex-1 py-3 rounded-2xl text-sm text-white font-medium disabled:opacity-40"
                 style={{ background: headerBg }}>
                 保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI 草稿编辑表单 */}
+      {editingDraftIdx !== null && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+          onClick={() => setEditingDraftIdx(null)}>
+          <div className="bg-white rounded-t-3xl w-full max-w-lg p-6 pb-10 flex flex-col gap-4"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-[#1A1A1A]">编辑 AI 草稿</h2>
+              <button onClick={() => setEditingDraftIdx(null)} className="w-7 h-7 flex items-center justify-center rounded-full bg-[#F5F5F0] text-[#9B9B9B]">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                </svg>
+              </button>
+            </div>
+            <div className="flex flex-col gap-3">
+              <div>
+                <p className="text-xs text-[#9B9B9B] mb-1">动作名称</p>
+                <input type="text" placeholder="如：正手击球、发球动作"
+                  value={draftEdit.title} onChange={e => setDraftEdit(v => ({ ...v, title: e.target.value }))}
+                  autoFocus
+                  className="w-full border border-[#E8E8E2] rounded-xl px-3 py-2.5 text-sm text-[#1A1A1A] outline-none focus:ring-2 focus:border-[#9DC41A]" />
+              </div>
+              <div>
+                <p className="text-xs text-[#9B9B9B] mb-1">技巧说明</p>
+                <textarea rows={5} placeholder="记录这个动作的要点、注意事项或教练指导…"
+                  value={draftEdit.content} onChange={e => setDraftEdit(v => ({ ...v, content: e.target.value }))}
+                  className="w-full border border-[#E8E8E2] rounded-xl px-3 py-2.5 text-sm text-[#1A1A1A] outline-none focus:ring-2 focus:border-[#9DC41A] resize-none" />
+              </div>
+              {categories.length > 0 && (
+                <div>
+                  <p className="text-xs text-[#9B9B9B] mb-1.5">技术分类</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {categories.map(c => (
+                      <button key={c} type="button"
+                        onClick={() => setDraftEdit(v => ({ ...v, category: v.category === c ? '' : c }))}
+                        className="px-3 py-1 rounded-full text-xs font-medium border transition"
+                        style={draftEdit.category === c
+                          ? { background: sport.accentColor, color: '#fff', borderColor: sport.accentColor }
+                          : { background: 'white', color: '#6B7280', borderColor: '#E8E8E2' }
+                        }>
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div>
+                <p className="text-xs text-[#9B9B9B] mb-1">细分标签（最多2个，逗号分隔）</p>
+                <input type="text" placeholder="如：转腰、随挥"
+                  value={draftEdit.tags} onChange={e => setDraftEdit(v => ({ ...v, tags: e.target.value }))}
+                  className="w-full border border-[#E8E8E2] rounded-xl px-3 py-2.5 text-sm text-[#1A1A1A] outline-none focus:ring-2 focus:border-[#9DC41A]" />
+              </div>
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => setEditingDraftIdx(null)}
+                className="flex-1 py-3 rounded-2xl border border-[#E8E8E2] text-sm text-[#6B7280] font-medium">
+                取消
+              </button>
+              <button onClick={saveDraftEdit} disabled={!draftEdit.title.trim() || !draftEdit.content.trim()}
+                className="flex-1 py-3 rounded-2xl text-sm text-white font-medium disabled:opacity-40"
+                style={{ background: headerBg }}>
+                保存草稿
               </button>
             </div>
           </div>

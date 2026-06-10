@@ -164,6 +164,7 @@ ${reflection ? `感悟：\n${reflection}` : ''}
 export interface GeneratedTechnique {
   title: string
   content: string
+  category?: string
   tags: string[]
 }
 
@@ -189,9 +190,34 @@ export function setGeneratedCache(sportId: string, items: GeneratedTechnique[]):
   localStorage.setItem(GENERATED_CACHE_KEY, JSON.stringify(cache))
 }
 
+function normalizeGeneratedTechniques(items: GeneratedTechnique[], categories: string[]): GeneratedTechnique[] {
+  return items.map(item => {
+    const text = `${item.title} ${item.content} ${(item.tags ?? []).join(' ')}`
+    const category = categories.find(c => item.category === c)
+      ?? categories.find(c => text.includes(c))
+      ?? categories[0]
+    const tags = (item.tags ?? [])
+      .flatMap(t => t.split(/[,，、/\s]+/))
+      .map(t => t.trim())
+      .filter(Boolean)
+      .filter(t => t !== category)
+      .filter(t => t.length <= 6)
+      .filter(t => !['技术', '训练', '注意', '要点'].includes(t))
+      .filter((t, i, arr) => arr.indexOf(t) === i)
+      .slice(0, 2)
+
+    return {
+      ...item,
+      category,
+      tags: tags.length > 0 ? tags : ['动作要点'],
+    }
+  })
+}
+
 export async function generateTechniques(
   records: TrainingRecord[],
   sportName: string,
+  categories: string[] = [],
 ): Promise<GeneratedTechnique[]> {
   const config = getAIConfig()
   if (records.length === 0) throw new Error('暂无训练记录，无法生成技巧')
@@ -205,18 +231,23 @@ export async function generateTechniques(
 要求：
 - 每条针对一个具体动作或技术环节
 - 内容简洁实用，80字以内
-- 标签选自训练记录中提到的技术点
+- category 必须从可用技术分类中选 1 个最匹配的分类；不要自创大类
+- tags 生成 1-2 个细分标签，来自训练记录中提到的动作细节、发力方式、节奏或常见问题；不要重复 category
+- tags 每个不超过 6 个字，避免泛词，如"技术"、"训练"、"注意"
+
+可用技术分类：
+${categories.length > 0 ? categories.join('、') : '无'}
 
 训练记录：
 ${recordSummary}
 
 请严格按以下 JSON 数组格式返回，不要有其他内容：
-[{"title":"动作名称","content":"技术要点说明","tags":["标签1","标签2"]}]`
+[{"title":"动作名称","content":"技术要点说明","category":"分类名","tags":["细分标签1","细分标签2"]}]`
 
   const data = await callAPI(config, { max_tokens: 1500, messages: [{ role: 'user', content: prompt }] })
   try {
     const cleaned = data.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
-    return JSON.parse(cleaned) as GeneratedTechnique[]
+    return normalizeGeneratedTechniques(JSON.parse(cleaned) as GeneratedTechnique[], categories)
   } catch {
     throw new Error('AI 返回格式异常，请重试')
   }
@@ -275,6 +306,7 @@ ${noteList}
 export async function parseExperienceText(
   text: string,
   sportName: string,
+  categories: string[] = [],
 ): Promise<GeneratedTechnique[]> {
   const config = getAIConfig()
 
@@ -283,19 +315,24 @@ export async function parseExperienceText(
 要求：
 - 每条针对一个具体动作或技术环节
 - 内容简洁实用，80字以内
-- 标签选自文字中提到的技术点
+- category 必须从可用技术分类中选 1 个最匹配的分类；不要自创大类
+- tags 生成 1-2 个细分标签，来自文字中提到的动作细节、发力方式、节奏或常见问题；不要重复 category
+- tags 每个不超过 6 个字，避免泛词，如"技术"、"训练"、"注意"
 - 如果原文已经很简洁，可以直接整理为1-2条
+
+可用技术分类：
+${categories.length > 0 ? categories.join('、') : '无'}
 
 原文：
 ${text}
 
 请严格按以下 JSON 数组格式返回，不要有其他内容：
-[{"title":"动作名称","content":"技术要点说明","tags":["标签1","标签2"]}]`
+[{"title":"动作名称","content":"技术要点说明","category":"分类名","tags":["细分标签1","细分标签2"]}]`
 
   const data = await callAPI(config, { max_tokens: 1500, messages: [{ role: 'user', content: prompt }] })
   try {
     const cleaned = data.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
-    return JSON.parse(cleaned) as GeneratedTechnique[]
+    return normalizeGeneratedTechniques(JSON.parse(cleaned) as GeneratedTechnique[], categories)
   } catch {
     throw new Error('AI 返回格式异常，请重试')
   }
