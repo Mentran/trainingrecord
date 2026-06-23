@@ -1,4 +1,6 @@
 import type { TrainingRecord, TechniqueNote } from '../types'
+import { scheduleLocalFileSync } from './localFileStore'
+import { STORAGE_KEYS } from './storageKeys'
 
 const CONFIG_KEY = 'ai_config'
 const LEGACY_KEY = 'claude_api_key'
@@ -357,9 +359,14 @@ export interface Conversation {
   updatedAt: string
 }
 
-const CONVERSATIONS_KEY = 'sport_conversations'
-const ACTIVE_CONV_KEY = 'sport_active_conv'
+const CONVERSATIONS_KEY = STORAGE_KEYS.conversations
+const ACTIVE_CONV_KEY = STORAGE_KEYS.activeConversation
 const LEGACY_CHAT_KEY = 'sport_chat_history'
+
+function setSyncedLocalItem(key: string, value: string): void {
+  localStorage.setItem(key, value)
+  scheduleLocalFileSync()
+}
 
 export function getConversations(): Conversation[] {
   try {
@@ -379,7 +386,7 @@ export function getConversations(): Conversation[] {
           createdAt: msgs[0].createdAt,
           updatedAt: msgs[msgs.length - 1].createdAt,
         }
-        localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify([conv]))
+        setSyncedLocalItem(CONVERSATIONS_KEY, JSON.stringify([conv]))
         localStorage.removeItem(LEGACY_CHAT_KEY)
         return [conv]
       }
@@ -393,12 +400,12 @@ export function saveConversation(conv: Conversation): void {
   const idx = list.findIndex(c => c.id === conv.id)
   if (idx >= 0) list[idx] = conv
   else list.unshift(conv)
-  localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(list))
+  setSyncedLocalItem(CONVERSATIONS_KEY, JSON.stringify(list))
 }
 
 export function deleteConversation(id: string): void {
   const list = getConversations().filter(c => c.id !== id)
-  localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(list))
+  setSyncedLocalItem(CONVERSATIONS_KEY, JSON.stringify(list))
 }
 
 export function getActiveConvId(): string | null {
@@ -406,7 +413,7 @@ export function getActiveConvId(): string | null {
 }
 
 export function setActiveConvId(id: string): void {
-  localStorage.setItem(ACTIVE_CONV_KEY, id)
+  setSyncedLocalItem(ACTIVE_CONV_KEY, id)
 }
 
 // ── System prompt ────────────────────────────────────────

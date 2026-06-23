@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { exportAll, validateBackup, importBackup, saveSport, updateSport, deleteSport, DEFAULT_SPORT, SPORT_CATEGORY_PRESETS, DEFAULT_EXPORT_OPTIONS, type AppBackup, type ExportOptions } from '../lib/storage'
 import { getAIConfig, setAIConfig, hasApiKey, generateSportCategories, categorizeTechniques, getConversations, type AIConfig } from '../lib/ai'
 import { getRecords, getTechniques, updateTechnique } from '../lib/storage'
+import { getLocalFileStoreStatus, saveCurrentDataToLocalFile } from '../lib/localFileStore'
 import { useToast } from '../components/ToastProvider'
 import { useSport } from '../components/SportProvider'
 import PageHeader from '../components/PageHeader'
@@ -51,6 +52,8 @@ export default function SettingsPage() {
   const [exportOptions, setExportOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS)
   const [showExportOptions, setShowExportOptions] = useState(false)
   const [pendingImport, setPendingImport] = useState<PendingImport | null>(null)
+  const [localFileStatus, setLocalFileStatus] = useState(getLocalFileStoreStatus)
+  const [savingLocalFile, setSavingLocalFile] = useState(false)
 
   function handleExport() {
     const selectedCount = Object.values(exportOptions).filter(Boolean).length
@@ -130,6 +133,20 @@ export default function SettingsPage() {
     setPendingImport(null)
     refreshSports()
     showToast('导入成功，请刷新页面')
+  }
+
+  async function handleSaveLocalFileNow() {
+    setSavingLocalFile(true)
+    try {
+      const next = await saveCurrentDataToLocalFile()
+      setLocalFileStatus(next)
+      showToast('已保存到本地文件')
+    } catch (e) {
+      setLocalFileStatus(getLocalFileStoreStatus())
+      showToast((e as Error).message ?? '保存失败', 'error')
+    } finally {
+      setSavingLocalFile(false)
+    }
   }
 
   function startEditAI() {
@@ -223,6 +240,8 @@ export default function SettingsPage() {
     { key: 'sports', label: '运动配置', unit: '个运动' },
     { key: 'conversations', label: '聊天记录', unit: '组对话' },
   ]
+  const localFilePath = localFileStatus.path?.replace('/Users/vitamin/Desktop/vibecoding/projects/网球训练记录/', '')
+  const localBackupPath = localFileStatus.backupsPath?.replace('/Users/vitamin/Desktop/vibecoding/projects/网球训练记录/', '')
 
   return (
     <div className="pb-8">
@@ -435,6 +454,61 @@ export default function SettingsPage() {
                   </button>
                 </div>
               </div>
+            )}
+          </div>
+        </div>
+
+        {/* 本地文件存储 */}
+        <div>
+          <p className="text-xs font-medium text-[#6B7280] uppercase tracking-wide mb-3">本地文件</p>
+          <div className="bg-white rounded-2xl card-shadow overflow-hidden px-4 py-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-base ${
+                  localFileStatus.available ? 'bg-[#E8F5C8]' : 'bg-[#FFF1D6]'
+                }`}>
+                  {localFileStatus.available ? '✓' : '!'}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[#1A1A1A]">
+                    {localFileStatus.available ? '已启用本地 JSON 存储' : '未连接本地文件存储'}
+                  </p>
+                  <p className="text-xs text-[#9B9B9B] mt-1">
+                    {localFileStatus.available
+                      ? (localFileStatus.loadedFromFile ? '启动时已从文件恢复数据' : '首次新增或修改数据后会创建文件')
+                      : '当前仅使用浏览器缓存'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setLocalFileStatus(getLocalFileStoreStatus())}
+                className="shrink-0 text-xs px-3 py-1.5 rounded-lg border border-[#E8E8E2] text-[#6B7280]"
+              >
+                刷新
+              </button>
+            </div>
+            {localFileStatus.available && (
+              <div className="mt-3 flex flex-col gap-2">
+                <div className="bg-[#F5F5F0] rounded-xl px-3 py-2">
+                  <p className="text-xs text-[#9B9B9B] mb-0.5">数据文件</p>
+                  <p className="text-xs font-mono text-[#6B7280] truncate">{localFilePath}</p>
+                </div>
+                <div className="bg-[#F5F5F0] rounded-xl px-3 py-2">
+                  <p className="text-xs text-[#9B9B9B] mb-0.5">自动备份</p>
+                  <p className="text-xs font-mono text-[#6B7280] truncate">{localBackupPath}</p>
+                </div>
+              </div>
+            )}
+            <button
+              onClick={handleSaveLocalFileNow}
+              disabled={!localFileStatus.available || savingLocalFile}
+              className="mt-3 w-full py-3 rounded-2xl text-sm text-white font-medium disabled:opacity-40"
+              style={{ background: activeSport.color }}
+            >
+              {savingLocalFile ? '保存中…' : '立即保存当前数据'}
+            </button>
+            {localFileStatus.error && (
+              <p className="text-xs text-red-500 mt-3">{localFileStatus.error}</p>
             )}
           </div>
         </div>

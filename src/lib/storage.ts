@@ -1,11 +1,13 @@
 import type { Conversation } from './ai'
+import { scheduleLocalFileSync } from './localFileStore'
+import { STORAGE_KEYS } from './storageKeys'
 import type { TrainingRecord, Sport, TechniqueNote } from '../types'
 
-const RECORDS_KEY = 'tennis_records'
-const SPORTS_KEY = 'sports_list'
-const ACTIVE_SPORT_KEY = 'active_sport_id'
-const TECHNIQUES_KEY = 'technique_notes'
-const CONVERSATIONS_KEY = 'sport_conversations'
+const RECORDS_KEY = STORAGE_KEYS.records
+const SPORTS_KEY = STORAGE_KEYS.sports
+const ACTIVE_SPORT_KEY = STORAGE_KEYS.activeSport
+const TECHNIQUES_KEY = STORAGE_KEYS.techniques
+const CONVERSATIONS_KEY = STORAGE_KEYS.conversations
 
 export const DEFAULT_SPORT: Sport = {
   id: 'tennis',
@@ -40,6 +42,11 @@ function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
+function setLocalItem(key: string, value: string): void {
+  localStorage.setItem(key, value)
+  scheduleLocalFileSync()
+}
+
 // ── Sports ──────────────────────────────────────────────
 
 export function getSports(): Sport[] {
@@ -63,7 +70,7 @@ export function saveSport(data: Omit<Sport, 'id' | 'createdAt'>): Sport {
   const sports = getSports()
   const sport: Sport = { ...data, id: generateId(), createdAt: new Date().toISOString() }
   sports.push(sport)
-  localStorage.setItem(SPORTS_KEY, JSON.stringify(sports))
+  setLocalItem(SPORTS_KEY, JSON.stringify(sports))
   return sport
 }
 
@@ -72,16 +79,16 @@ export function updateSport(id: string, data: Partial<Omit<Sport, 'id' | 'create
   const idx = sports.findIndex(s => s.id === id)
   if (idx === -1) return
   sports[idx] = { ...sports[idx], ...data }
-  localStorage.setItem(SPORTS_KEY, JSON.stringify(sports))
+  setLocalItem(SPORTS_KEY, JSON.stringify(sports))
 }
 
 export function deleteSport(id: string): void {
   if (id === DEFAULT_SPORT.id) return // 默认运动不可删除
   const sports = getSports().filter(s => s.id !== id)
-  localStorage.setItem(SPORTS_KEY, JSON.stringify(sports))
+  setLocalItem(SPORTS_KEY, JSON.stringify(sports))
   // 删除该运动下的所有记录
   const records = getRecords().filter(r => r.sportId !== id)
-  localStorage.setItem(RECORDS_KEY, JSON.stringify(records))
+  setLocalItem(RECORDS_KEY, JSON.stringify(records))
   // 如果当前激活的是被删除的运动，切回默认
   if (getActiveSportId() === id) setActiveSportId(DEFAULT_SPORT.id)
 }
@@ -91,7 +98,7 @@ export function getActiveSportId(): string {
 }
 
 export function setActiveSportId(id: string): void {
-  localStorage.setItem(ACTIVE_SPORT_KEY, id)
+  setLocalItem(ACTIVE_SPORT_KEY, id)
 }
 
 export function getActiveSport(): Sport {
@@ -120,7 +127,7 @@ export function saveRecord(data: Omit<TrainingRecord, 'id' | 'createdAt' | 'upda
   const now = new Date().toISOString()
   const record: TrainingRecord = { ...data, id: generateId(), createdAt: now, updatedAt: now }
   records.unshift(record)
-  localStorage.setItem(RECORDS_KEY, JSON.stringify(records))
+  setLocalItem(RECORDS_KEY, JSON.stringify(records))
   return record
 }
 
@@ -130,7 +137,7 @@ export function updateRecord(id: string, data: Partial<Omit<TrainingRecord, 'id'
   if (index === -1) return null
   const updated: TrainingRecord = { ...records[index], ...data, updatedAt: new Date().toISOString() }
   records[index] = updated
-  localStorage.setItem(RECORDS_KEY, JSON.stringify(records))
+  setLocalItem(RECORDS_KEY, JSON.stringify(records))
   return updated
 }
 
@@ -138,7 +145,7 @@ export function deleteRecord(id: string): boolean {
   const records = getRecords()
   const filtered = records.filter(r => r.id !== id)
   if (filtered.length === records.length) return false
-  localStorage.setItem(RECORDS_KEY, JSON.stringify(filtered))
+  setLocalItem(RECORDS_KEY, JSON.stringify(filtered))
   return true
 }
 
@@ -223,13 +230,13 @@ export function importBackup(json: string, options: ExportOptions = DEFAULT_EXPO
   const data = JSON.parse(json) as AppBackup | TrainingRecord[]
   // 兼容旧格式（纯记录数组）
   if (Array.isArray(data)) {
-    if (options.records) localStorage.setItem(RECORDS_KEY, JSON.stringify(data))
+    if (options.records) setLocalItem(RECORDS_KEY, JSON.stringify(data))
     return
   }
-  if (options.records && data.records) localStorage.setItem(RECORDS_KEY, JSON.stringify(data.records))
-  if (options.techniques && data.techniques) localStorage.setItem(TECHNIQUES_KEY, JSON.stringify(data.techniques))
-  if (options.sports && data.sports) localStorage.setItem(SPORTS_KEY, JSON.stringify(data.sports))
-  if (options.conversations && data.conversations) localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(data.conversations))
+  if (options.records && data.records) setLocalItem(RECORDS_KEY, JSON.stringify(data.records))
+  if (options.techniques && data.techniques) setLocalItem(TECHNIQUES_KEY, JSON.stringify(data.techniques))
+  if (options.sports && data.sports) setLocalItem(SPORTS_KEY, JSON.stringify(data.sports))
+  if (options.conversations && data.conversations) setLocalItem(CONVERSATIONS_KEY, JSON.stringify(data.conversations))
 }
 
 // 保留旧名称供外部兼容
@@ -259,7 +266,7 @@ export function saveTechnique(data: Omit<TechniqueNote, 'id' | 'createdAt' | 'up
   const now = new Date().toISOString()
   const note: TechniqueNote = { ...data, id: generateId(), createdAt: now, updatedAt: now }
   notes.unshift(note)
-  localStorage.setItem(TECHNIQUES_KEY, JSON.stringify(notes))
+  setLocalItem(TECHNIQUES_KEY, JSON.stringify(notes))
   return note
 }
 
@@ -269,7 +276,7 @@ export function updateTechnique(id: string, data: Partial<Omit<TechniqueNote, 'i
   if (index === -1) return null
   const updated: TechniqueNote = { ...notes[index], ...data, updatedAt: new Date().toISOString() }
   notes[index] = updated
-  localStorage.setItem(TECHNIQUES_KEY, JSON.stringify(notes))
+  setLocalItem(TECHNIQUES_KEY, JSON.stringify(notes))
   return updated
 }
 
@@ -277,6 +284,6 @@ export function deleteTechnique(id: string): boolean {
   const notes = getTechniques()
   const filtered = notes.filter(n => n.id !== id)
   if (filtered.length === notes.length) return false
-  localStorage.setItem(TECHNIQUES_KEY, JSON.stringify(filtered))
+  setLocalItem(TECHNIQUES_KEY, JSON.stringify(filtered))
   return true
 }

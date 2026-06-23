@@ -1,0 +1,4 @@
+app-data.json
+app-data.json.tmp
+backups/
+!.gitignore
