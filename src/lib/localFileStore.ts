@@ -16,6 +16,7 @@ export interface LocalFileData {
 export interface LocalFileStoreStatus {
   available: boolean
   loadedFromFile: boolean
+  message: string
   path?: string
   backupsPath?: string
   lastSavedAt?: string
@@ -32,7 +33,10 @@ let syncQueued = false
 let status: LocalFileStoreStatus = {
   available: false,
   loadedFromFile: false,
+  message: '数据保存在当前浏览器',
 }
+
+const LOCAL_FILE_STORE_ENABLED = import.meta.env.DEV
 
 function readJson<T>(key: string, fallback: T): T {
   try {
@@ -112,6 +116,17 @@ async function writeLocalFileNow(): Promise<void> {
 }
 
 export async function initializeLocalFileStore(): Promise<LocalFileStoreStatus> {
+  if (!LOCAL_FILE_STORE_ENABLED) {
+    initialized = true
+    available = false
+    status = {
+      available: false,
+      loadedFromFile: false,
+      message: '线上静态站点使用浏览器本地缓存',
+    }
+    return status
+  }
+
   try {
     const res = await fetch('/api/local-store', { cache: 'no-store' })
     if (!res.ok) throw new Error(`本地文件服务不可用：${res.status}`)
@@ -127,6 +142,7 @@ export async function initializeLocalFileStore(): Promise<LocalFileStoreStatus> 
     status = {
       available: true,
       loadedFromFile: payload.exists,
+      message: payload.exists ? '启动时已从文件恢复数据' : '首次新增或修改数据后会创建文件',
       path: payload.path,
       backupsPath: payload.backupsPath,
       lastSavedAt: payload.data?.savedAt,
@@ -141,6 +157,7 @@ export async function initializeLocalFileStore(): Promise<LocalFileStoreStatus> 
     status = {
       available: false,
       loadedFromFile: false,
+      message: '本地文件服务不可用，已改用浏览器缓存',
       error: (error as Error).message,
     }
     return status
@@ -153,7 +170,7 @@ export function getLocalFileStoreStatus(): LocalFileStoreStatus {
 
 export async function saveCurrentDataToLocalFile(): Promise<LocalFileStoreStatus> {
   if (!initialized) await initializeLocalFileStore()
-  if (!available) throw new Error(status.error ?? '本地文件服务不可用')
+  if (!available) throw new Error(status.message)
   if (syncTimer !== null) {
     window.clearTimeout(syncTimer)
     syncTimer = null

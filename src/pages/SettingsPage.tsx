@@ -18,11 +18,19 @@ const PRESET_COLORS: { color: string; accent: string; label: string }[] = [
 ]
 
 const PRESET_EMOJIS = ['🎾', '🏊', '🏃', '⚽', '🏀', '🏋️', '🚴', '🧘', '🥊', '🏸', '⛷️', '🤸']
+const BACKUP_META_KEY = 'training_backup_meta'
+const BACKUP_RECORD_INTERVAL = 5
+const BACKUP_DAY_INTERVAL = 14
 
 interface AddSportForm {
   name: string
   icon: string
   colorIndex: number
+}
+
+interface BackupMeta {
+  exportedAt: string
+  recordsCount: number
 }
 
 interface PendingImport {
@@ -31,6 +39,30 @@ interface PendingImport {
   options: ExportOptions
   available: ExportOptions
   counts: Record<keyof ExportOptions, number>
+}
+
+function getBackupMeta(): BackupMeta | null {
+  try {
+    const raw = localStorage.getItem(BACKUP_META_KEY)
+    return raw ? (JSON.parse(raw) as BackupMeta) : null
+  } catch {
+    return null
+  }
+}
+
+function formatRelativeDate(iso?: string): string {
+  if (!iso) return '从未导出'
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
+  if (days <= 0) return '今天'
+  if (days === 1) return '昨天'
+  return `${days} 天前`
+}
+
+function estimateTextSize(text: string): string {
+  const bytes = new Blob([text]).size
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
 export default function SettingsPage() {
@@ -54,6 +86,7 @@ export default function SettingsPage() {
   const [pendingImport, setPendingImport] = useState<PendingImport | null>(null)
   const [localFileStatus, setLocalFileStatus] = useState(getLocalFileStoreStatus)
   const [savingLocalFile, setSavingLocalFile] = useState(false)
+  const [backupMeta, setBackupMeta] = useState<BackupMeta | null>(getBackupMeta)
 
   function handleExport() {
     const selectedCount = Object.values(exportOptions).filter(Boolean).length
@@ -69,6 +102,11 @@ export default function SettingsPage() {
     a.download = `training-backup-${new Date().toISOString().slice(0, 10)}.json`
     a.click()
     URL.revokeObjectURL(url)
+    if (exportOptions.records) {
+      const nextMeta = { exportedAt: new Date().toISOString(), recordsCount: getRecords().length }
+      localStorage.setItem(BACKUP_META_KEY, JSON.stringify(nextMeta))
+      setBackupMeta(nextMeta)
+    }
     showToast(selectedCount === 4 ? '已导出完整备份' : '已导出所选数据')
   }
 
@@ -228,11 +266,25 @@ export default function SettingsPage() {
     ? aiConfig.apiKey.slice(0, 8) + '••••••••' + aiConfig.apiKey.slice(-4)
     : ''
 
+  const allRecords = getRecords()
+  const allTechniques = getTechniques()
+  const allConversations = getConversations()
+  const storageSize = estimateTextSize(exportAll())
+  const backupDays = backupMeta ? Math.floor((Date.now() - new Date(backupMeta.exportedAt).getTime()) / 86400000) : null
+  const recordsSinceBackup = backupMeta ? Math.max(0, allRecords.length - backupMeta.recordsCount) : allRecords.length
+  const shouldRemindBackup = allRecords.length > 0 && (!backupMeta || recordsSinceBackup >= BACKUP_RECORD_INTERVAL || (backupDays ?? 0) >= BACKUP_DAY_INTERVAL)
+  const backupReminder = !backupMeta
+    ? '还没有导出过训练记录，建议先保存一份 JSON 备份。'
+    : recordsSinceBackup >= BACKUP_RECORD_INTERVAL
+      ? `上次导出后新增 ${recordsSinceBackup} 条训练记录，建议备份。`
+      : `距离上次导出已 ${backupDays} 天，建议更新备份。`
+  const storageModeLabel = localFileStatus.available ? '本地 JSON 文件' : '浏览器缓存'
+
   const exportItems: Array<{ key: keyof ExportOptions; label: string; desc: string }> = [
-    { key: 'records', label: '训练记录', desc: `${getRecords().length} 条` },
-    { key: 'techniques', label: '技巧笔记', desc: `${getTechniques().length} 条` },
+    { key: 'records', label: '训练记录', desc: `${allRecords.length} 条` },
+    { key: 'techniques', label: '技巧笔记', desc: `${allTechniques.length} 条` },
     { key: 'sports', label: '运动配置', desc: `${sports.length} 个运动` },
-    { key: 'conversations', label: '聊天记录', desc: `${getConversations().length} 组对话` },
+    { key: 'conversations', label: '聊天记录', desc: `${allConversations.length} 组对话` },
   ]
   const importItems: Array<{ key: keyof ExportOptions; label: string; unit: string }> = [
     { key: 'records', label: '训练记录', unit: '条' },
@@ -467,16 +519,14 @@ export default function SettingsPage() {
                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-base ${
                   localFileStatus.available ? 'bg-[#E8F5C8]' : 'bg-[#FFF1D6]'
                 }`}>
-                  {localFileStatus.available ? '✓' : '!'}
+                  {localFileStatus.available ? '✓' : 'i'}
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-[#1A1A1A]">
-                    {localFileStatus.available ? '已启用本地 JSON 存储' : '未连接本地文件存储'}
+                    {localFileStatus.available ? '已启用本地 JSON 存储' : '浏览器本地缓存'}
                   </p>
                   <p className="text-xs text-[#9B9B9B] mt-1">
-                    {localFileStatus.available
-                      ? (localFileStatus.loadedFromFile ? '启动时已从文件恢复数据' : '首次新增或修改数据后会创建文件')
-                      : '当前仅使用浏览器缓存'}
+                    {localFileStatus.message}
                   </p>
                 </div>
               </div>
@@ -499,17 +549,69 @@ export default function SettingsPage() {
                 </div>
               </div>
             )}
-            <button
-              onClick={handleSaveLocalFileNow}
-              disabled={!localFileStatus.available || savingLocalFile}
-              className="mt-3 w-full py-3 rounded-2xl text-sm text-white font-medium disabled:opacity-40"
-              style={{ background: activeSport.color }}
-            >
-              {savingLocalFile ? '保存中…' : '立即保存当前数据'}
-            </button>
-            {localFileStatus.error && (
+            {localFileStatus.available && (
+              <button
+                onClick={handleSaveLocalFileNow}
+                disabled={savingLocalFile}
+                className="mt-3 w-full py-3 rounded-2xl text-sm text-white font-medium disabled:opacity-40"
+                style={{ background: activeSport.color }}
+              >
+                {savingLocalFile ? '保存中…' : '立即保存当前数据'}
+              </button>
+            )}
+            {localFileStatus.error && localFileStatus.available && (
               <p className="text-xs text-red-500 mt-3">{localFileStatus.error}</p>
             )}
+            {!localFileStatus.available && (
+              <div className="mt-3 bg-[#FFF8E8] rounded-xl px-3 py-2.5 border border-[#F4E3B8]">
+                <p className="text-xs font-medium text-[#7A5A16]">线上使用注意</p>
+                <p className="text-xs text-[#8A7448] mt-1 leading-relaxed">
+                  数据只保存在当前浏览器；换设备不会同步，清理浏览器数据可能丢失，建议定期导出 JSON。
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 数据概览 */}
+        <div>
+          <p className="text-xs font-medium text-[#6B7280] uppercase tracking-wide mb-3">数据概览</p>
+          <div className="bg-white rounded-2xl card-shadow overflow-hidden">
+            <div className="grid grid-cols-2 border-b border-[#E8E8E2]">
+              {[
+                { label: '训练记录', value: allRecords.length, unit: '条' },
+                { label: '技巧笔记', value: allTechniques.length, unit: '条' },
+                { label: '聊天记录', value: allConversations.length, unit: '组' },
+                { label: '运动项目', value: sports.length, unit: '个' },
+              ].map((item, idx) => (
+                <div key={item.label} className={`px-4 py-3.5 ${idx % 2 === 0 ? 'border-r border-[#E8E8E2]' : ''} ${idx > 1 ? 'border-t border-[#E8E8E2]' : ''}`}>
+                  <p className="text-xs text-[#9B9B9B]">{item.label}</p>
+                  <p className="text-lg font-semibold text-[#1A1A1A] mt-0.5">
+                    {item.value}<span className="text-xs text-[#9B9B9B] ml-1">{item.unit}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+            <div className="px-4 py-3 flex flex-col gap-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[#9B9B9B]">存储模式</span>
+                <span className="text-[#1A1A1A] font-medium">{storageModeLabel}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[#9B9B9B]">估算大小</span>
+                <span className="text-[#1A1A1A] font-medium">{storageSize}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[#9B9B9B]">上次导出</span>
+                <span className="text-[#1A1A1A] font-medium">{formatRelativeDate(backupMeta?.exportedAt)}</span>
+              </div>
+              {localFileStatus.available && localFileStatus.lastSavedAt && (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-[#9B9B9B]">文件保存</span>
+                  <span className="text-[#1A1A1A] font-medium">{formatRelativeDate(localFileStatus.lastSavedAt)}</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -631,6 +733,17 @@ export default function SettingsPage() {
         <div>
           <p className="text-xs font-medium text-[#6B7280] uppercase tracking-wide mb-3">数据备份</p>
           <div className="bg-white rounded-2xl card-shadow overflow-hidden">
+            {shouldRemindBackup && (
+              <div className="px-4 py-3 border-b border-[#E8E8E2] bg-[#FFF8E8]">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-[#FFE7AA] flex items-center justify-center text-sm shrink-0">!</div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-[#7A5A16]">建议导出备份</p>
+                    <p className="text-xs text-[#8A7448] mt-1 leading-relaxed">{backupReminder}</p>
+                  </div>
+                </div>
+              </div>
+            )}
             <button
               onClick={toggleExportOptions}
               className="w-full flex items-center justify-between px-4 py-4 text-sm text-[#1A1A1A] active:bg-[#F5F5F0] transition border-b border-[#E8E8E2]"
