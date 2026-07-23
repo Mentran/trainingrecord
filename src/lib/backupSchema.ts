@@ -8,6 +8,13 @@ const nonEmptyString = z.string().trim().min(1)
 const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '日期必须为 YYYY-MM-DD')
 const isoString = z.string().refine(value => !Number.isNaN(Date.parse(value)), '时间格式无效')
 
+const trainingFocusSchema = z.object({
+  cardId: nonEmptyString.optional(),
+  text: nonEmptyString,
+  outcome: z.enum(['improved', 'unchanged', 'worse']).optional(),
+  note: z.string().optional(),
+})
+
 const trainingRecordSchema = z.object({
   id: nonEmptyString,
   sportId: nonEmptyString.optional().default(DEFAULT_SPORT_ID),
@@ -19,6 +26,7 @@ const trainingRecordSchema = z.object({
   reflection: z.string().default(''),
   reflectionOriginal: z.string().optional(),
   tags: z.array(z.string()).optional(),
+  focus: trainingFocusSchema.optional(),
   polishStatus: z.enum(['none', 'partial', 'applied', 'failed']).optional(),
   createdAt: isoString.optional(),
   updatedAt: isoString.optional(),

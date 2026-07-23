@@ -10,6 +10,8 @@ import {
   hasImportRestorePoint,
   importBackup,
   restoreLastImport,
+  saveRecord,
+  updateRecord,
 } from './storage'
 
 const now = '2026-07-10T00:00:00.000Z'
@@ -93,5 +95,33 @@ describe('storage import and sport isolation', () => {
     expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.techniques) ?? '[]')).toEqual([])
     expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.conversations) ?? '[]')).toEqual([])
     expect(localStorage.getItem(`${STORAGE_KEYS.activeConversation}:running`)).toBeNull()
+  })
+
+  it('保存关注点并允许训练后补充结果', () => {
+    const saved = saveRecord({
+      sportId: 'tennis',
+      date: '2026-07-10',
+      duration: 60,
+      coach: '',
+      content: '练习正手',
+      contentOriginal: '练习正手',
+      reflection: '',
+      reflectionOriginal: '',
+      focus: {
+        cardId: 'forehand-ready-turn-15',
+        text: '有没有提前转肩？',
+      },
+      polishStatus: 'none',
+    })
+
+    const updated = updateRecord(saved.id, {
+      focus: { ...saved.focus!, outcome: 'improved', note: '多数球可以提前准备' },
+    })
+
+    expect(updated?.focus).toMatchObject({
+      outcome: 'improved',
+      note: '多数球可以提前准备',
+    })
+    expect(getRecords('tennis')[0].focus).toEqual(updated?.focus)
   })
 })

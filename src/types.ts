@@ -1,5 +1,14 @@
 export type TennisLevel = '1.0' | '1.5' | '2.0' | '2.5' | '3.0'
 
+export type TrainingFocusOutcome = 'improved' | 'unchanged' | 'worse'
+
+export interface TrainingFocus {
+  cardId?: string
+  text: string
+  outcome?: TrainingFocusOutcome
+  note?: string
+}
+
 export interface TrainingRecord {
   id: string
   sportId: string              // 关联运动项目
@@ -11,6 +20,7 @@ export interface TrainingRecord {
   reflection: string
   reflectionOriginal: string
   tags?: string[]
+  focus?: TrainingFocus
   polishStatus?: 'none' | 'partial' | 'applied' | 'failed'
   createdAt: string
   updatedAt: string

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { getRecords, getCoaches, getTechniques, saveTechnique } from '../lib/storage'
-import { getRecommendedTrainingPrompt, type TennisKnowledgeCard } from '../data/tennisKnowledge'
+import { getRecommendedTrainingPrompt, isTennisSport, type TennisKnowledgeCard } from '../data/tennisKnowledge'
 import { useToast } from '../contexts/ToastContext'
-import type { Sport, TrainingRecord } from '../types'
+import type { TrainingRecord } from '../types'
 import TrainingCard from '../components/TrainingCard'
 import { getCoachColor } from '../lib/recordPresentation'
 import { useSport } from '../contexts/SportContext'
@@ -34,13 +34,6 @@ function getInitialPromptExpanded() {
   } catch {
     return false
   }
-}
-
-function isTennisSport(sport: Sport) {
-  return sport.id === 'tennis'
-    || sport.name.includes('网球')
-    || sport.icon.includes('🎾')
-    || (sport.categories.includes('正手') && sport.categories.includes('反手'))
 }
 
 function PromptVisual({ type, color }: { type: TennisKnowledgeCard['visualType']; color: string }) {
@@ -119,7 +112,7 @@ export default function ListPage() {
   }
 
   function handleUsePrompt(card: TennisKnowledgeCard) {
-    const params = new URLSearchParams({ focus: card.focus, tag: card.category })
+    const params = new URLSearchParams({ focus: card.focus, focusCardId: card.id, tag: card.category })
     navigate(`/record?${params.toString()}`)
   }
 
@@ -348,7 +341,7 @@ export default function ListPage() {
         <div className="flex flex-col gap-3">
           {filtered.map(record => (
             <TrainingCard key={record.id} date={record.date} coach={record.coach}
-              duration={record.duration} content={record.content} tags={record.tags}
+              duration={record.duration} content={record.content} tags={record.tags} focus={record.focus}
               coachColor={getCoachColor(record.coach, coaches)}
               onClick={() => navigate(`/detail/${record.id}`)} />
           ))}

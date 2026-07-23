@@ -165,6 +165,13 @@ interface Sport {
   createdAt: string
 }
 
+interface TrainingFocus {
+  cardId?: string
+  text: string
+  outcome?: 'improved' | 'unchanged' | 'worse'
+  note?: string
+}
+
 interface TrainingRecord {
   id: string
   sportId: string              // 关联运动项目（第二阶段数据层预埋，UI 第三阶段开放）
@@ -176,6 +183,7 @@ interface TrainingRecord {
   reflection: string           // 感悟（最终保留版本）
   reflectionOriginal: string   // 感悟原文
   tags?: string[]
+  focus?: TrainingFocus       // 本次训练关注点与训练后验证结果
   polishStatus?: 'none' | 'partial' | 'applied' | 'failed'
   createdAt: string
   updatedAt: string

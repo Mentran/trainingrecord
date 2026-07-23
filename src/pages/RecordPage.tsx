@@ -4,12 +4,15 @@ import { saveRecord, updateRecord, getRecords, getCoaches } from '../lib/storage
 import { polishText, hasApiKey } from '../lib/ai'
 import PageHeader from '../components/PageHeader'
 import { useSport } from '../contexts/SportContext'
+import type { TrainingFocus, TrainingFocusOutcome } from '../types'
+import { FOCUS_OUTCOME_LABELS } from '../lib/trainingFocus'
 
 function today(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
 const DURATION_PRESETS = [30, 45, 60, 90, 120]
+const FOCUS_OUTCOMES: TrainingFocusOutcome[] = ['improved', 'unchanged', 'worse']
 
 interface FormState {
   date: string
@@ -27,6 +30,7 @@ export default function RecordPage() {
   const editId = searchParams.get('edit')
   const dateParam = searchParams.get('date')
   const focusParam = searchParams.get('focus')
+  const focusCardIdParam = searchParams.get('focusCardId')
   const tagParam = searchParams.get('tag')
 
   const editingRecord = editId ? getRecords().find(record => record.id === editId) : undefined
@@ -48,6 +52,11 @@ export default function RecordPage() {
   const [customDuration, setCustomDuration] = useState(false)
   const [tagInput, setTagInput] = useState('')
   const [polishing, setPolishing] = useState(false)
+  const [focus, setFocus] = useState<TrainingFocus | undefined>(() => (
+    focusParam?.trim()
+      ? { text: focusParam.trim(), cardId: focusCardIdParam?.trim() || undefined }
+      : undefined
+  ))
 
   useEffect(() => {
     setCoaches(getCoaches(editingRecord?.sportId ?? sport.id))
@@ -62,12 +71,17 @@ export default function RecordPage() {
           reflection: record.reflection,
           tags: record.tags ?? [],
         })
+        setFocus(record.focus)
         if (record.duration && !DURATION_PRESETS.includes(record.duration)) {
           setCustomDuration(true)
         }
       }
+    } else {
+      setFocus(focusParam?.trim()
+        ? { text: focusParam.trim(), cardId: focusCardIdParam?.trim() || undefined }
+        : undefined)
     }
-  }, [editId, editingRecord?.sportId, sport.id])
+  }, [editId, editingRecord?.sportId, focusCardIdParam, focusParam, sport.id])
 
   function set(field: keyof Omit<FormState, 'tags'>, value: string) {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -123,13 +137,17 @@ export default function RecordPage() {
       polishStatus: 'none' as const,
       sportId: editingRecord?.sportId ?? sport.id,
       tags: form.tags,
+      focus: focus
+        ? { ...focus, text: focus.text.trim(), note: focus.note?.trim() || undefined }
+        : undefined,
     }
+    let saved
     if (editId) {
-      updateRecord(editId, data)
+      saved = updateRecord(editId, data)
     } else {
-      saveRecord(data)
+      saved = saveRecord(data)
     }
-    navigate('/')
+    navigate(saved ? `/detail/${saved.id}${editId ? '' : '?saved=1'}` : '/', { replace: true })
   }
 
   const inputClass = (hasError?: string) =>
@@ -146,11 +164,54 @@ export default function RecordPage() {
 
       <form onSubmit={handleSubmit} noValidate className="px-4 pt-5 flex flex-col gap-4">
 
-        {focusParam && !editId && (
+        {focus && (
           <div className="rounded-2xl px-4 py-3 border"
             style={{ background: sport.accentColor + '14', borderColor: sport.accentColor + '40' }}>
-            <p className="text-xs font-semibold mb-1" style={{ color: sport.color }}>今日关注</p>
-            <p className="text-sm leading-relaxed" style={{ color: sport.color }}>{focusParam}</p>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold mb-1" style={{ color: sport.color }}>本次训练关注</p>
+                <p className="text-sm leading-relaxed" style={{ color: sport.color }}>{focus.text}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFocus(undefined)}
+                aria-label="移除本次训练关注点"
+                className="shrink-0 text-lg leading-none opacity-50"
+                style={{ color: sport.color }}
+              >
+                ×
+              </button>
+            </div>
+            <div className="mt-3">
+              <p className="text-[11px] font-medium mb-2" style={{ color: sport.color }}>训练后感觉（可稍后补）</p>
+              <div className="grid grid-cols-3 gap-2">
+                {FOCUS_OUTCOMES.map(outcome => (
+                  <button
+                    key={outcome}
+                    type="button"
+                    aria-pressed={focus.outcome === outcome}
+                    onClick={() => setFocus(previous => previous ? { ...previous, outcome } : previous)}
+                    className="rounded-xl border px-2 py-2 text-xs font-medium transition"
+                    style={focus.outcome === outcome
+                      ? { background: sport.color, borderColor: sport.color, color: 'white' }
+                      : { background: 'white', borderColor: sport.accentColor + '55', color: sport.color }}
+                  >
+                    {FOCUS_OUTCOME_LABELS[outcome]}
+                  </button>
+                ))}
+              </div>
+              {focus.outcome && (
+                <textarea
+                  aria-label="训练关注点结果说明"
+                  rows={2}
+                  placeholder="记录一个具体证据，例如：10 球有 6 球能提前转肩"
+                  value={focus.note ?? ''}
+                  onChange={event => setFocus(previous => previous ? { ...previous, note: event.target.value } : previous)}
+                  className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-xs text-[#1A1A1A] outline-none resize-none"
+                  style={{ borderColor: sport.accentColor + '55' }}
+                />
+              )}
+            </div>
           </div>
         )}
 

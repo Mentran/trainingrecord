@@ -1,10 +1,15 @@
 import { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { getRecords, deleteRecord, getCoaches, updateRecord } from '../lib/storage'
 import { hasApiKey, polishText } from '../lib/ai'
 import { useToast } from '../contexts/ToastContext'
 import { getCoachColor } from '../lib/recordPresentation'
 import { useSport } from '../contexts/SportContext'
+import { getRecommendedTrainingPrompt, getTennisKnowledgeCard, isTennisSport } from '../data/tennisKnowledge'
+import { FOCUS_OUTCOME_LABELS, getUnresolvedFocusStreak, isUnresolvedFocusOutcome } from '../lib/trainingFocus'
+import type { TrainingFocusOutcome } from '../types'
+
+const FOCUS_OUTCOMES: TrainingFocusOutcome[] = ['improved', 'unchanged', 'worse']
 
 function formatDate(date: string) {
   const d = new Date(date + 'T00:00:00')
@@ -14,6 +19,7 @@ function formatDate(date: string) {
 export default function DetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { showToast } = useToast()
   const { sport } = useSport()
 
@@ -33,6 +39,11 @@ export default function DetailPage() {
 
   const coachColor = getCoachColor(record.coach, coaches)
   const apiConfigured = hasApiKey()
+  const justSaved = searchParams.get('saved') === '1'
+  const focusStreak = getUnresolvedFocusStreak(getRecords(record.sportId), record)
+  const relatedPrompt = justSaved && isTennisSport(sport)
+    ? getRecommendedTrainingPrompt(sport.level ?? '2.0', [record], record.focus ? 1 : 0)
+    : null
 
   function handleDelete() {
     if (!confirm('确定删除这条记录？')) return
@@ -69,6 +80,29 @@ export default function DetailPage() {
     showToast('已应用润色')
   }
 
+  function handleFocusOutcome(outcome: TrainingFocusOutcome) {
+    if (!record!.focus) return
+    const updated = updateRecord(record!.id, {
+      focus: { ...record!.focus, outcome },
+    })
+    if (updated) setRecord(updated)
+    showToast(`已记录：${FOCUS_OUTCOME_LABELS[outcome]}`)
+  }
+
+  function navigateWithFocus(text: string, cardId?: string, category?: string) {
+    const params = new URLSearchParams({ focus: text })
+    if (cardId) params.set('focusCardId', cardId)
+    if (category) params.set('tag', category)
+    navigate(`/record?${params.toString()}`)
+  }
+
+  function handleCarryFocus() {
+    if (!record!.focus) return
+    const card = getTennisKnowledgeCard(record!.focus.cardId)
+    const category = card?.category ?? record!.tags?.find(tag => sport.categories.includes(tag))
+    navigateWithFocus(record!.focus.text, record!.focus.cardId, category)
+  }
+
   return (
     <div className="pb-8">
       {/* 深色 Header */}
@@ -79,6 +113,7 @@ export default function DetailPage() {
         <div className="flex items-start justify-between mb-4">
           <button
             onClick={() => navigate(-1)}
+            aria-label="返回"
             className="w-9 h-9 flex items-center justify-center rounded-full bg-white/15 text-white"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -129,6 +164,72 @@ export default function DetailPage() {
 
       {/* 内容区 */}
       <div className="px-4 pt-5 flex flex-col gap-4">
+
+        {record.focus && (
+          <div>
+            <p className="text-xs font-medium text-[#6B7280] uppercase tracking-wide mb-2">本次训练关注</p>
+            <div className="rounded-2xl border p-4" style={{ background: sport.accentColor + '12', borderColor: sport.accentColor + '40' }}>
+              <p className="text-sm font-medium leading-relaxed" style={{ color: sport.color }}>🎯 {record.focus.text}</p>
+              <div className="grid grid-cols-3 gap-2 mt-3">
+                {FOCUS_OUTCOMES.map(outcome => (
+                  <button
+                    key={outcome}
+                    type="button"
+                    aria-pressed={record.focus?.outcome === outcome}
+                    onClick={() => handleFocusOutcome(outcome)}
+                    className="rounded-xl border px-2 py-2 text-xs font-medium transition"
+                    style={record.focus?.outcome === outcome
+                      ? { background: sport.color, borderColor: sport.color, color: 'white' }
+                      : { background: 'white', borderColor: sport.accentColor + '55', color: sport.color }}
+                  >
+                    {FOCUS_OUTCOME_LABELS[outcome]}
+                  </button>
+                ))}
+              </div>
+              {record.focus.note && (
+                <p className="mt-3 rounded-xl bg-white/75 px-3 py-2 text-xs leading-relaxed text-[#6B7280]">
+                  证据：{record.focus.note}
+                </p>
+              )}
+              {isUnresolvedFocusOutcome(record.focus.outcome) && (
+                <button
+                  type="button"
+                  onClick={handleCarryFocus}
+                  className="mt-3 w-full rounded-xl py-2.5 text-xs font-semibold text-white"
+                  style={{ background: sport.color }}
+                >
+                  延续到下次训练
+                </button>
+              )}
+              {focusStreak >= 3 && (
+                <p className="mt-3 text-xs leading-relaxed text-amber-700">
+                  这个问题已连续 {focusStreak} 次没有改善。下次建议降低练习难度，或请教练只纠正这一件事。
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {relatedPrompt && (
+          <div className="bg-white rounded-2xl card-shadow overflow-hidden">
+            <div className="p-4">
+              <p className="text-xs font-semibold mb-2" style={{ color: sport.accentColor }}>保存成功 · 下一步建议</p>
+              <p className="text-base font-semibold text-[#1A1A1A]">{relatedPrompt.title}</p>
+              <p className="mt-1 text-sm leading-relaxed text-[#6B7280]">{relatedPrompt.drill}</p>
+              <div className="mt-3 rounded-xl px-3 py-2" style={{ background: sport.accentColor + '14' }}>
+                <p className="text-xs leading-relaxed" style={{ color: sport.color }}>{relatedPrompt.focus}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigateWithFocus(relatedPrompt.focus, relatedPrompt.id, relatedPrompt.category)}
+              className="w-full border-t border-[#E8E8E2] py-3 text-sm font-semibold"
+              style={{ color: sport.accentColor }}
+            >
+              设为下次关注
+            </button>
+          </div>
+        )}
 
         {/* 润色预览对比 */}
         {preview && (

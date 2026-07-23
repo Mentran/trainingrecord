@@ -42,4 +42,22 @@ describe('parseBackupJson', () => {
     }
     expect(() => parseBackupJson(JSON.stringify(backup))).toThrow(/不存在的运动项目/)
   })
+
+  it('保留训练关注点并拒绝未知结果值', () => {
+    const focused = {
+      ...legacyRecord,
+      focus: {
+        cardId: 'forehand-ready-turn-15',
+        text: '有没有提前转肩？',
+        outcome: 'unchanged',
+        note: '仍然偏晚',
+      },
+    }
+    const parsed = parseBackupJson(JSON.stringify([focused]))
+    expect(parsed.records?.[0].focus).toEqual(focused.focus)
+
+    expect(() => parseBackupJson(JSON.stringify([
+      { ...focused, focus: { ...focused.focus, outcome: 'unknown' } },
+    ]))).toThrow(/outcome/)
+  })
 })

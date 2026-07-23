@@ -1,4 +1,4 @@
-import type { TennisLevel, TrainingRecord } from '../types'
+import type { Sport, TennisLevel, TrainingRecord } from '../types'
 
 export type TennisKnowledgeCategory = '正手' | '反手' | '发球' | '步伐' | '截击' | '战术'
 export type TennisVisualType = 'forehand' | 'backhand' | 'serve' | 'footwork' | 'court'
@@ -257,6 +257,17 @@ function dateSeed(date = new Date()): number {
 
 function recordText(records: TrainingRecord[]): string {
   return records.slice(0, 5).map(r => `${r.content} ${r.reflection} ${(r.tags ?? []).join(' ')}`).join(' ')
+}
+
+export function isTennisSport(sport: Sport): boolean {
+  return sport.id === 'tennis'
+    || sport.name.includes('网球')
+    || sport.icon.includes('🎾')
+    || (sport.categories.includes('正手') && sport.categories.includes('反手'))
+}
+
+export function getTennisKnowledgeCard(id?: string): TennisKnowledgeCard | undefined {
+  return id ? TENNIS_KNOWLEDGE_CARDS.find(card => card.id === id) : undefined
 }
 
 export function getRecommendedTrainingPrompt(

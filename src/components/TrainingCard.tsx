@@ -1,9 +1,13 @@
+import type { TrainingFocus } from '../types'
+import { FOCUS_OUTCOME_LABELS } from '../lib/trainingFocus'
+
 interface TrainingCardProps {
   date: string
   coach?: string
   duration?: number
   content: string
   tags?: string[]
+  focus?: TrainingFocus
   coachColor?: string
   onClick?: () => void
   compact?: boolean
@@ -19,7 +23,7 @@ function excerpt(text: string, max: number) {
   return text.length > max ? text.slice(0, max) + '…' : text
 }
 
-export default function TrainingCard({ date, coach, duration, content, tags, coachColor, onClick, compact = false }: TrainingCardProps) {
+export default function TrainingCard({ date, coach, duration, content, tags, focus, coachColor, onClick, compact = false }: TrainingCardProps) {
   const accent = coachColor ?? '#9DC41A'
   return (
     <button
@@ -53,6 +57,16 @@ export default function TrainingCard({ date, coach, duration, content, tags, coa
         <p className={`text-[#888] leading-relaxed line-clamp-2 ${compact ? 'text-xs' : 'text-sm'}`}>
           {excerpt(content, compact ? 50 : 90)}
         </p>
+        {focus && !compact && (
+          <div className="mt-2 rounded-xl bg-[#F7F8F1] px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-[#66703F] line-clamp-1">🎯 {focus.text}</p>
+              {focus.outcome && (
+                <span className="shrink-0 text-[11px] text-[#7C835E]">{FOCUS_OUTCOME_LABELS[focus.outcome]}</span>
+              )}
+            </div>
+          </div>
+        )}
         {/* 标签 */}
         {tags && tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
