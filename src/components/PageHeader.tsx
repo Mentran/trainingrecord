@@ -1,4 +1,4 @@
-import { useSport } from './SportProvider'
+import { useSport } from '../contexts/SportContext'
 
 interface PageHeaderProps {
   title: string
@@ -19,6 +19,7 @@ export default function PageHeader({ title, subtitle, right, onBack }: PageHeade
           {onBack && (
             <button
               onClick={onBack}
+              aria-label="返回"
               className="w-8 h-8 flex items-center justify-center rounded-full bg-white/15 text-white"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">

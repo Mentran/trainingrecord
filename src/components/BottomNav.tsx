@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom'
-import { useSport } from './SportProvider'
+import { useSport } from '../contexts/SportContext'
 
 const tabs = [
   {

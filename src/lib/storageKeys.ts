@@ -5,4 +5,6 @@ export const STORAGE_KEYS = {
   techniques: 'technique_notes',
   conversations: 'sport_conversations',
   activeConversation: 'sport_active_conv',
+  localUpdatedAt: 'training_local_updated_at',
+  importRestorePoint: 'training_import_restore_point',
 } as const

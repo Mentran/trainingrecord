@@ -1,4 +1,5 @@
 import type { Conversation } from './ai'
+import { parseBackupJson } from './backupSchema'
 import { scheduleLocalFileSync } from './localFileStore'
 import { STORAGE_KEYS } from './storageKeys'
 import type { TrainingRecord, Sport, TechniqueNote } from '../types'
@@ -16,6 +17,7 @@ export const DEFAULT_SPORT: Sport = {
   color: '#1A2E1A',
   accentColor: '#9DC41A',
   categories: ['正手', '反手', '发球', '步伐', '截击', '战术'],
+  level: '2.0',
   createdAt: '2026-01-01T00:00:00.000Z',
 }
 
@@ -47,6 +49,11 @@ function setLocalItem(key: string, value: string): void {
   scheduleLocalFileSync()
 }
 
+function removeLocalItem(key: string): void {
+  localStorage.removeItem(key)
+  scheduleLocalFileSync()
+}
+
 // ── Sports ──────────────────────────────────────────────
 
 export function getSports(): Sport[] {
@@ -55,7 +62,10 @@ export function getSports(): Sport[] {
     if (!raw) return [DEFAULT_SPORT]
     let list = JSON.parse(raw) as Sport[]
     // 迁移：旧数据没有 categories 字段
-    list = list.map(s => s.categories ? s : { ...s, categories: s.id === DEFAULT_SPORT.id ? DEFAULT_SPORT.categories : [] })
+    list = list.map(s => {
+      const next = s.categories ? s : { ...s, categories: s.id === DEFAULT_SPORT.id ? DEFAULT_SPORT.categories : [] }
+      return next.id === DEFAULT_SPORT.id && !next.level ? { ...next, level: DEFAULT_SPORT.level } : next
+    })
     // 保证默认网球项目始终存在
     if (!list.find(s => s.id === DEFAULT_SPORT.id)) {
       list.unshift(DEFAULT_SPORT)
@@ -86,9 +96,14 @@ export function deleteSport(id: string): void {
   if (id === DEFAULT_SPORT.id) return // 默认运动不可删除
   const sports = getSports().filter(s => s.id !== id)
   setLocalItem(SPORTS_KEY, JSON.stringify(sports))
-  // 删除该运动下的所有记录
+  // 级联删除该运动下的所有从属数据，避免产生孤儿记录
   const records = getRecords().filter(r => r.sportId !== id)
   setLocalItem(RECORDS_KEY, JSON.stringify(records))
+  const techniques = getTechniques().filter(note => note.sportId !== id)
+  setLocalItem(TECHNIQUES_KEY, JSON.stringify(techniques))
+  const conversations = getConversationsForBackup().filter(conversation => conversation.sportId !== id)
+  setLocalItem(CONVERSATIONS_KEY, JSON.stringify(conversations))
+  removeLocalItem(`${STORAGE_KEYS.activeConversation}:${id}`)
   // 如果当前激活的是被删除的运动，切回默认
   if (getActiveSportId() === id) setActiveSportId(DEFAULT_SPORT.id)
 }
@@ -178,6 +193,8 @@ export interface ExportOptions {
   conversations: boolean
 }
 
+export type ImportMode = 'replace' | 'merge'
+
 export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   records: true,
   techniques: true,
@@ -188,7 +205,12 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
 function getConversationsForBackup(): Conversation[] {
   try {
     const raw = localStorage.getItem(CONVERSATIONS_KEY)
-    return raw ? (JSON.parse(raw) as Conversation[]) : []
+    return raw
+      ? (JSON.parse(raw) as Array<Conversation | Omit<Conversation, 'sportId'>>)
+          .map(conversation => 'sportId' in conversation && conversation.sportId
+            ? conversation as Conversation
+            : { ...conversation, sportId: DEFAULT_SPORT.id })
+      : []
   } catch {
     return []
   }
@@ -208,35 +230,102 @@ export function exportAll(options: ExportOptions = DEFAULT_EXPORT_OPTIONS): stri
 
 export function validateBackup(json: string): { valid: boolean; summary: string; error?: string } {
   try {
-    const data = JSON.parse(json) as Partial<AppBackup>
-    // 兼容旧格式（纯记录数组）
-    if (Array.isArray(data)) {
-      return { valid: true, summary: `训练记录 ${(data as TrainingRecord[]).length} 条（旧格式）` }
-    }
-    if (data.version !== 2) return { valid: false, summary: '', error: '不支持的备份格式' }
+    const data = parseBackupJson(json)
     const parts = [
       data.records ? `训练记录 ${data.records.length} 条` : '',
       data.techniques ? `技巧笔记 ${data.techniques.length} 条` : '',
       data.sports ? `运动项目 ${data.sports.length} 个` : '',
       data.conversations ? `聊天记录 ${data.conversations.length} 组` : '',
     ]
-    return { valid: true, summary: parts.filter(Boolean).join('，') || '空备份' }
-  } catch {
-    return { valid: false, summary: '', error: 'JSON 解析失败' }
+    const suffix = data.legacy ? '（旧格式，将自动迁移）' : ''
+    return { valid: true, summary: `${parts.filter(Boolean).join('，') || '空备份'}${suffix}` }
+  } catch (error) {
+    return { valid: false, summary: '', error: (error as Error).message }
   }
 }
 
-export function importBackup(json: string, options: ExportOptions = DEFAULT_EXPORT_OPTIONS): void {
-  const data = JSON.parse(json) as AppBackup | TrainingRecord[]
-  // 兼容旧格式（纯记录数组）
-  if (Array.isArray(data)) {
-    if (options.records) setLocalItem(RECORDS_KEY, JSON.stringify(data))
-    return
+function mergeById<T extends { id: string }>(current: T[], incoming: T[]): T[] {
+  const merged = new Map(current.map(item => [item.id, item]))
+  incoming.forEach(item => merged.set(item.id, item))
+  return [...merged.values()]
+}
+
+function writeImportRestorePoint(): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.importRestorePoint, exportAll())
+  } catch (error) {
+    throw new Error('无法创建导入恢复点，已取消导入', { cause: error })
   }
-  if (options.records && data.records) setLocalItem(RECORDS_KEY, JSON.stringify(data.records))
-  if (options.techniques && data.techniques) setLocalItem(TECHNIQUES_KEY, JSON.stringify(data.techniques))
-  if (options.sports && data.sports) setLocalItem(SPORTS_KEY, JSON.stringify(data.sports))
-  if (options.conversations && data.conversations) setLocalItem(CONVERSATIONS_KEY, JSON.stringify(data.conversations))
+}
+
+export function hasImportRestorePoint(): boolean {
+  return localStorage.getItem(STORAGE_KEYS.importRestorePoint) !== null
+}
+
+export function importBackup(
+  json: string,
+  options: ExportOptions = DEFAULT_EXPORT_OPTIONS,
+  mode: ImportMode = 'replace',
+  createRestorePoint = true,
+): void {
+  const data = parseBackupJson(json)
+  const selectedSports = options.sports && data.sports
+    ? (mode === 'merge' ? mergeById(getSports(), data.sports) : data.sports)
+    : getSports()
+  const importedSports = selectedSports.some(sport => sport.id === DEFAULT_SPORT.id)
+    ? selectedSports
+    : [DEFAULT_SPORT, ...selectedSports]
+  const sportIds = new Set(importedSports.map(sport => sport.id))
+
+  const nextRecords = options.records && data.records
+    ? (mode === 'merge' ? mergeById(getRecords(), data.records) : data.records)
+    : undefined
+  const nextTechniques = options.techniques && data.techniques
+    ? (mode === 'merge' ? mergeById(getTechniques(), data.techniques) : data.techniques)
+    : undefined
+  const nextConversations = options.conversations && data.conversations
+    ? (mode === 'merge' ? mergeById(getConversationsForBackup(), data.conversations) : data.conversations)
+    : undefined
+  const selectedGroups: Array<[string, Array<{ sportId: string }> | undefined]> = [
+    ['训练记录', nextRecords],
+    ['技巧笔记', nextTechniques],
+    ['聊天记录', nextConversations],
+  ]
+  for (const [label, items] of selectedGroups) {
+    const unknown = items?.find(item => !sportIds.has(item.sportId))
+    if (unknown) throw new Error(`${label}引用了不存在的运动项目：${unknown.sportId}`)
+  }
+
+  const updates = new Map<string, string>()
+  if (nextRecords) updates.set(RECORDS_KEY, JSON.stringify(nextRecords))
+  if (nextTechniques) updates.set(TECHNIQUES_KEY, JSON.stringify(nextTechniques))
+  if (options.sports && data.sports) updates.set(SPORTS_KEY, JSON.stringify(importedSports))
+  if (nextConversations) updates.set(CONVERSATIONS_KEY, JSON.stringify(nextConversations))
+
+  if (updates.size === 0) return
+  if (createRestorePoint) writeImportRestorePoint()
+
+  const previous = new Map<string, string | null>()
+  updates.forEach((_, key) => previous.set(key, localStorage.getItem(key)))
+  try {
+    updates.forEach((value, key) => localStorage.setItem(key, value))
+  } catch (error) {
+    previous.forEach((value, key) => {
+      if (value === null) localStorage.removeItem(key)
+      else localStorage.setItem(key, value)
+    })
+    throw new Error(`导入失败，原数据已恢复：${(error as Error).message}`, { cause: error })
+  }
+  scheduleLocalFileSync()
+}
+
+export function restoreLastImport(): void {
+  const restorePoint = localStorage.getItem(STORAGE_KEYS.importRestorePoint)
+  if (!restorePoint) throw new Error('没有可用的导入恢复点')
+  const current = exportAll()
+  importBackup(restorePoint, DEFAULT_EXPORT_OPTIONS, 'replace', false)
+  localStorage.setItem(STORAGE_KEYS.importRestorePoint, current)
+  scheduleLocalFileSync()
 }
 
 // 保留旧名称供外部兼容

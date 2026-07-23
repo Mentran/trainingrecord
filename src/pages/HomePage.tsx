@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { getRecords, getCoaches } from '../lib/storage'
+import { getRecords, getCoaches, getTechniques, saveTechnique } from '../lib/storage'
+import { getRecommendedTrainingPrompt, type TennisKnowledgeCard } from '../data/tennisKnowledge'
+import { useToast } from '../contexts/ToastContext'
 import type { TrainingRecord } from '../types'
-import TrainingCard, { getCoachColor } from '../components/TrainingCard'
-import { useSport } from '../components/SportProvider'
+import TrainingCard from '../components/TrainingCard'
+import { getCoachColor } from '../lib/recordPresentation'
+import { useSport } from '../contexts/SportContext'
 
 function formatGreeting() {
   const h = new Date().getHours()
@@ -24,12 +27,42 @@ function daysSinceLastTraining(records: TrainingRecord[]): number | null {
   return diff
 }
 
+function PromptVisual({ type, color }: { type: TennisKnowledgeCard['visualType']; color: string }) {
+  const isServe = type === 'serve'
+  const isFootwork = type === 'footwork'
+  return (
+    <div className="relative w-full h-24 rounded-xl overflow-hidden bg-[#F5F5F0]">
+      <div className="absolute inset-2 rounded-lg border border-[#DADAD2]" />
+      <div className="absolute left-1/2 top-2 bottom-2 w-px bg-[#DADAD2]" />
+      <div className="absolute left-2 right-2 top-1/2 h-px bg-[#DADAD2]" />
+      <div className="absolute w-6 h-6 rounded-full border-2 bg-white"
+        style={{ borderColor: color, left: isServe ? '22%' : isFootwork ? '28%' : '34%', top: isServe ? '18%' : '52%' }} />
+      <div className="absolute w-3 h-3 rounded-full" style={{ background: color, right: isServe ? '28%' : '22%', top: isServe ? '24%' : '38%' }} />
+      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 260 96" fill="none">
+        <path d={isServe ? 'M70 30 C105 8 150 16 188 30' : isFootwork ? 'M72 68 C102 50 126 50 158 40' : 'M86 64 C120 44 150 36 188 36'}
+          stroke={color} strokeWidth="3" strokeLinecap="round" strokeDasharray={isFootwork ? '5 6' : '0'} />
+        <path d="M178 31l12 4-10 7" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <div className="absolute left-3 bottom-2 text-[10px] text-[#9B9B9B]">击球点 / 线路 / 回位</div>
+    </div>
+  )
+}
+
+function isTennisSport(sport: ReturnType<typeof useSport>['sport']) {
+  return sport.id === 'tennis'
+    || sport.name.includes('网球')
+    || sport.icon.includes('🎾')
+    || (sport.categories.includes('正手') && sport.categories.includes('反手'))
+}
+
 export default function HomePage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { sport, sports, switchSport } = useSport()
+  const { showToast } = useToast()
   const [records, setRecords] = useState<TrainingRecord[]>([])
   const [coaches, setCoaches] = useState<string[]>([])
+  const [promptOffset, setPromptOffset] = useState(0)
 
   useEffect(() => {
     setRecords(getRecords(sport.id))
@@ -41,6 +74,8 @@ export default function HomePage() {
   const totalCoaches = coaches.length
   const recent = records.slice(0, 3)
   const daysSince = daysSinceLastTraining(records)
+  const isTennis = isTennisSport(sport)
+  const trainingPrompt = isTennis ? getRecommendedTrainingPrompt(sport.level ?? '2.0', records, promptOffset) : null
 
   // 根据训练数据调整装饰圆的视觉强度
   const intensity = Math.min(totalSessions / 20, 1) // 20次训练达到最大强度
@@ -48,6 +83,29 @@ export default function HomePage() {
   const circle2Opacity = 0.06 + intensity * 0.06 // 0.06 - 0.12
 
   const headerBg = `linear-gradient(150deg, ${sport.color} 0%, ${sport.color}e0 60%, ${sport.accentColor}55 100%)`
+
+  function handleCollectPrompt(card: TennisKnowledgeCard) {
+    const exists = getTechniques(sport.id).some(note => note.title === card.title && note.category === card.category)
+    if (exists) {
+      showToast('这条提示已经在技巧笔记里')
+      return
+    }
+    saveTechnique({
+      sportId: sport.id,
+      title: card.title,
+      content: `${card.fact}\n\n为什么重要：${card.why}\n\n练习：${card.drill}\n\n记录关注：${card.focus}`,
+      source: 'user',
+      category: card.category,
+      tags: [card.level, '训练提示'],
+      votes: 0,
+    })
+    showToast('已收藏到技巧笔记')
+  }
+
+  function handleUsePrompt(card: TennisKnowledgeCard) {
+    const params = new URLSearchParams({ focus: card.focus, tag: card.category })
+    navigate(`/record?${params.toString()}`)
+  }
 
   return (
     <div className="pb-8">
@@ -129,6 +187,60 @@ export default function HomePage() {
 
       {/* 内容区 */}
       <div className="px-4 pt-5">
+        {trainingPrompt && (
+          <div className="mb-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xs font-semibold text-[#ADADAD] uppercase tracking-widest">今日训练提示</h2>
+              <button onClick={() => setPromptOffset(v => v + 1)}
+                className="text-xs font-semibold" style={{ color: sport.accentColor }}>
+                换一条
+              </button>
+            </div>
+            <div className="bg-white rounded-2xl card-shadow overflow-hidden">
+              <div className="p-4 flex flex-col gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold text-white" style={{ background: sport.color }}>
+                    {trainingPrompt.level}
+                  </span>
+                  <span className="px-2.5 py-1 rounded-full text-xs font-medium"
+                    style={{ background: sport.accentColor + '22', color: sport.color }}>
+                    {trainingPrompt.category}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-base font-semibold text-[#1A1A1A]">{trainingPrompt.title}</p>
+                  <p className="text-sm text-[#6B7280] leading-relaxed mt-1">{trainingPrompt.fact}</p>
+                </div>
+                <PromptVisual type={trainingPrompt.visualType} color={sport.accentColor} />
+                <div className="grid gap-2">
+                  <div className="rounded-xl bg-[#FAFAF7] px-3 py-2">
+                    <p className="text-[11px] font-semibold text-[#9B9B9B] mb-0.5">为什么重要</p>
+                    <p className="text-xs text-[#6B7280] leading-relaxed">{trainingPrompt.why}</p>
+                  </div>
+                  <div className="rounded-xl bg-[#FAFAF7] px-3 py-2">
+                    <p className="text-[11px] font-semibold text-[#9B9B9B] mb-0.5">今天练什么</p>
+                    <p className="text-xs text-[#6B7280] leading-relaxed">{trainingPrompt.drill}</p>
+                  </div>
+                  <div className="rounded-xl px-3 py-2" style={{ background: sport.accentColor + '14' }}>
+                    <p className="text-[11px] font-semibold mb-0.5" style={{ color: sport.color }}>记录时关注</p>
+                    <p className="text-xs leading-relaxed" style={{ color: sport.color }}>{trainingPrompt.focus}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex border-t border-[#E8E8E2]">
+                <button onClick={() => handleCollectPrompt(trainingPrompt)}
+                  className="flex-1 py-3 text-sm font-semibold" style={{ color: sport.accentColor }}>
+                  收藏到技巧笔记
+                </button>
+                <button onClick={() => handleUsePrompt(trainingPrompt)}
+                  className="flex-1 py-3 text-sm font-medium border-l border-[#E8E8E2] text-[#6B7280]">
+                  设为今日关注
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {records.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
             <div className="w-20 h-20 rounded-3xl flex items-center justify-center text-4xl"

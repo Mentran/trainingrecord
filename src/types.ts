@@ -1,3 +1,5 @@
+export type TennisLevel = '1.0' | '1.5' | '2.0' | '2.5' | '3.0'
+
 export interface TrainingRecord {
   id: string
   sportId: string              // 关联运动项目
@@ -21,6 +23,7 @@ export interface Sport {
   color: string                // 主题色 hex（深色，用于 header）
   accentColor: string          // 强调色 hex（亮色，用于 badge/按钮）
   categories: string[]         // 技术分类，如["正手","反手","发球","步伐","截击","战术"]
+  level?: TennisLevel          // 网球等级，用于训练提示推荐
   createdAt: string
 }
 

@@ -1,12 +1,12 @@
 import { useState, useRef } from 'react'
-import { exportAll, validateBackup, importBackup, saveSport, updateSport, deleteSport, DEFAULT_SPORT, SPORT_CATEGORY_PRESETS, DEFAULT_EXPORT_OPTIONS, type AppBackup, type ExportOptions } from '../lib/storage'
+import { exportAll, validateBackup, importBackup, restoreLastImport, hasImportRestorePoint, saveSport, updateSport, deleteSport, DEFAULT_SPORT, SPORT_CATEGORY_PRESETS, DEFAULT_EXPORT_OPTIONS, type AppBackup, type ExportOptions, type ImportMode } from '../lib/storage'
 import { getAIConfig, setAIConfig, hasApiKey, generateSportCategories, categorizeTechniques, getConversations, type AIConfig } from '../lib/ai'
 import { getRecords, getTechniques, updateTechnique } from '../lib/storage'
 import { getLocalFileStoreStatus, saveCurrentDataToLocalFile } from '../lib/localFileStore'
-import { useToast } from '../components/ToastProvider'
-import { useSport } from '../components/SportProvider'
+import { useToast } from '../contexts/ToastContext'
+import { useSport } from '../contexts/SportContext'
 import PageHeader from '../components/PageHeader'
-import type { Sport } from '../types'
+import type { Sport, TennisLevel } from '../types'
 
 const PRESET_COLORS: { color: string; accent: string; label: string }[] = [
   { color: '#1A2E1A', accent: '#9DC41A', label: '网球绿' },
@@ -21,6 +21,14 @@ const PRESET_EMOJIS = ['🎾', '🏊', '🏃', '⚽', '🏀', '🏋️', '🚴',
 const BACKUP_META_KEY = 'training_backup_meta'
 const BACKUP_RECORD_INTERVAL = 5
 const BACKUP_DAY_INTERVAL = 14
+
+const TENNIS_LEVELS: Array<{ value: TennisLevel; title: string; desc: string }> = [
+  { value: '1.0', title: '新手入门', desc: '刚开始学，先建立握拍、准备姿势和完整动作。' },
+  { value: '1.5', title: '基础对打', desc: '能简单来回，重点是转身、引拍和击球点。' },
+  { value: '2.0', title: '基础稳定', desc: '能稳定练基础动作，重点是动作链条和节奏。' },
+  { value: '2.5', title: '慢速回合', desc: '能打慢速回合，开始关注连续性和落点。' },
+  { value: '3.0', title: '战术意识', desc: '能组织简单回合，开始练线路、站位和变化。' },
+]
 
 interface AddSportForm {
   name: string
@@ -39,6 +47,7 @@ interface PendingImport {
   options: ExportOptions
   available: ExportOptions
   counts: Record<keyof ExportOptions, number>
+  mode: ImportMode
 }
 
 function getBackupMeta(): BackupMeta | null {
@@ -50,12 +59,18 @@ function getBackupMeta(): BackupMeta | null {
   }
 }
 
-function formatRelativeDate(iso?: string): string {
+function formatRelativeDate(iso: string | undefined, now: number): string {
   if (!iso) return '从未导出'
-  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
+  const days = Math.floor((now - new Date(iso).getTime()) / 86400000)
   if (days <= 0) return '今天'
   if (days === 1) return '昨天'
   return `${days} 天前`
+}
+
+function formatLocalPath(value?: string): string | undefined {
+  if (!value) return value
+  const normalized = value.replaceAll('\\', '/')
+  return normalized.match(/(?:^|\/)(data\/.*)$/)?.[1] ?? normalized
 }
 
 function estimateTextSize(text: string): string {
@@ -87,6 +102,8 @@ export default function SettingsPage() {
   const [localFileStatus, setLocalFileStatus] = useState(getLocalFileStoreStatus)
   const [savingLocalFile, setSavingLocalFile] = useState(false)
   const [backupMeta, setBackupMeta] = useState<BackupMeta | null>(getBackupMeta)
+  const [renderedAt] = useState(() => Date.now())
+  const [canRestoreImport, setCanRestoreImport] = useState(hasImportRestorePoint)
 
   function handleExport() {
     const selectedCount = Object.values(exportOptions).filter(Boolean).length
@@ -142,7 +159,7 @@ export default function SettingsPage() {
         sports: !Array.isArray(parsed) ? parsed.sports?.length ?? 0 : 0,
         conversations: !Array.isArray(parsed) ? parsed.conversations?.length ?? 0 : 0,
       }
-      setPendingImport({ json: text, summary: check.summary, options: available, available, counts })
+      setPendingImport({ json: text, summary: check.summary, options: available, available, counts, mode: 'replace' })
     }
     reader.readAsText(file)
     e.target.value = ''
@@ -166,11 +183,29 @@ export default function SettingsPage() {
       .filter(item => pendingImport.options[item.key])
       .map(item => item.label)
       .join('、')
-    if (!confirm(`导入将覆盖所选数据：${selectedLabels}。确认继续？`)) return
-    importBackup(pendingImport.json, pendingImport.options)
-    setPendingImport(null)
-    refreshSports()
-    showToast('导入成功，请刷新页面')
+    const action = pendingImport.mode === 'merge' ? '合并' : '覆盖'
+    if (!confirm(`导入将${action}所选数据：${selectedLabels}。确认继续？`)) return
+    try {
+      importBackup(pendingImport.json, pendingImport.options, pendingImport.mode)
+      setPendingImport(null)
+      setCanRestoreImport(true)
+      refreshSports()
+      showToast(`导入成功（${action}），可在设置中撤销`)
+    } catch (error) {
+      showToast((error as Error).message ?? '导入失败，原数据未改变', 'error')
+    }
+  }
+
+  function handleRestoreImport() {
+    if (!confirm('将恢复到上次导入前的数据，当前数据会成为新的恢复点。确认继续？')) return
+    try {
+      restoreLastImport()
+      refreshSports()
+      setCanRestoreImport(true)
+      showToast('已恢复到上次导入前的数据')
+    } catch (error) {
+      showToast((error as Error).message ?? '恢复失败', 'error')
+    }
   }
 
   async function handleSaveLocalFileNow() {
@@ -216,6 +251,12 @@ export default function SettingsPage() {
     else refreshSports()
     setDeleteTarget(null)
     showToast('已删除')
+  }
+
+  function handleSetTennisLevel(level: TennisLevel) {
+    updateSport(DEFAULT_SPORT.id, { level })
+    refreshSports()
+    showToast('网球等级已更新')
   }
 
   function openEditCategories(sport: Sport) {
@@ -270,7 +311,7 @@ export default function SettingsPage() {
   const allTechniques = getTechniques()
   const allConversations = getConversations()
   const storageSize = estimateTextSize(exportAll())
-  const backupDays = backupMeta ? Math.floor((Date.now() - new Date(backupMeta.exportedAt).getTime()) / 86400000) : null
+  const backupDays = backupMeta ? Math.floor((renderedAt - new Date(backupMeta.exportedAt).getTime()) / 86400000) : null
   const recordsSinceBackup = backupMeta ? Math.max(0, allRecords.length - backupMeta.recordsCount) : allRecords.length
   const shouldRemindBackup = allRecords.length > 0 && (!backupMeta || recordsSinceBackup >= BACKUP_RECORD_INTERVAL || (backupDays ?? 0) >= BACKUP_DAY_INTERVAL)
   const backupReminder = !backupMeta
@@ -292,8 +333,10 @@ export default function SettingsPage() {
     { key: 'sports', label: '运动配置', unit: '个运动' },
     { key: 'conversations', label: '聊天记录', unit: '组对话' },
   ]
-  const localFilePath = localFileStatus.path?.replace('/Users/vitamin/Desktop/vibecoding/projects/网球训练记录/', '')
-  const localBackupPath = localFileStatus.backupsPath?.replace('/Users/vitamin/Desktop/vibecoding/projects/网球训练记录/', '')
+  const localFilePath = formatLocalPath(localFileStatus.path)
+  const localBackupPath = formatLocalPath(localFileStatus.backupsPath)
+  const tennisSport = sports.find(s => s.id === DEFAULT_SPORT.id) ?? DEFAULT_SPORT
+  const tennisLevel = tennisSport.level ?? DEFAULT_SPORT.level ?? '2.0'
 
   return (
     <div className="pb-8">
@@ -510,6 +553,38 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* 网球等级 */}
+        <div>
+          <p className="text-xs font-medium text-[#6B7280] uppercase tracking-wide mb-3">网球等级</p>
+          <div className="bg-white rounded-2xl card-shadow overflow-hidden">
+            <div className="px-4 py-4 border-b border-[#E8E8E2]">
+              <p className="text-sm font-medium text-[#1A1A1A]">当前等级：{tennisLevel}</p>
+              <p className="text-xs text-[#9B9B9B] mt-1">用于推荐今日训练提示，先手动选择，后续可根据训练记录辅助判断。</p>
+            </div>
+            <div className="p-3 flex flex-col gap-2">
+              {TENNIS_LEVELS.map(level => {
+                const selected = tennisLevel === level.value
+                return (
+                  <button
+                    key={level.value}
+                    type="button"
+                    onClick={() => handleSetTennisLevel(level.value)}
+                    className={`text-left rounded-xl border px-3 py-2.5 transition ${
+                      selected ? 'border-[#9DC41A] bg-[#F8FBEF]' : 'border-[#E8E8E2] bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold text-[#1A1A1A]">{level.value} · {level.title}</p>
+                      {selected && <span className="text-xs font-medium text-[#6A9400]">当前</span>}
+                    </div>
+                    <p className="text-xs text-[#9B9B9B] mt-1 leading-relaxed">{level.desc}</p>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
         {/* 本地文件存储 */}
         <div>
           <p className="text-xs font-medium text-[#6B7280] uppercase tracking-wide mb-3">本地文件</p>
@@ -603,12 +678,12 @@ export default function SettingsPage() {
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-[#9B9B9B]">上次导出</span>
-                <span className="text-[#1A1A1A] font-medium">{formatRelativeDate(backupMeta?.exportedAt)}</span>
+                <span className="text-[#1A1A1A] font-medium">{formatRelativeDate(backupMeta?.exportedAt, renderedAt)}</span>
               </div>
               {localFileStatus.available && localFileStatus.lastSavedAt && (
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-[#9B9B9B]">文件保存</span>
-                  <span className="text-[#1A1A1A] font-medium">{formatRelativeDate(localFileStatus.lastSavedAt)}</span>
+                  <span className="text-[#1A1A1A] font-medium">{formatRelativeDate(localFileStatus.lastSavedAt, renderedAt)}</span>
                 </div>
               )}
             </div>
@@ -815,7 +890,7 @@ export default function SettingsPage() {
                 </div>
                 <span>导入数据</span>
               </div>
-              <span className="text-[#9B9B9B] text-xs">覆盖现有 →</span>
+              <span className="text-[#9B9B9B] text-xs">覆盖或合并 →</span>
             </button>
             {pendingImport && (
               <div className="px-4 py-4 border-t border-[#E8E8E2] bg-[#FAFAF7]">
@@ -866,6 +941,19 @@ export default function SettingsPage() {
                     )
                   })}
                 </div>
+                <div className="grid grid-cols-2 gap-2 mt-3" role="group" aria-label="导入方式">
+                  {([
+                    { value: 'replace' as const, label: '覆盖', desc: '所选类别以备份为准' },
+                    { value: 'merge' as const, label: '合并', desc: '同 ID 以备份为准' },
+                  ]).map(mode => (
+                    <button key={mode.value} type="button"
+                      onClick={() => setPendingImport(current => current ? { ...current, mode: mode.value } : current)}
+                      className={`rounded-xl border px-3 py-2 text-left ${pendingImport.mode === mode.value ? 'border-[#4A90D9] bg-[#EEF5FF]' : 'border-[#E8E8E2] bg-white'}`}>
+                      <p className="text-sm font-medium text-[#1A1A1A]">{mode.label}</p>
+                      <p className="text-[11px] text-[#9B9B9B] mt-0.5">{mode.desc}</p>
+                    </button>
+                  ))}
+                </div>
                 <button
                   onClick={handleConfirmImport}
                   className="mt-3 w-full py-3 rounded-2xl text-sm text-white font-medium active:opacity-85 transition"
@@ -875,8 +963,14 @@ export default function SettingsPage() {
                 </button>
               </div>
             )}
+            {canRestoreImport && !pendingImport && (
+              <button onClick={handleRestoreImport}
+                className="w-full px-4 py-3 border-t border-[#E8E8E2] text-sm text-[#4A90D9] text-left active:bg-[#F5F5F0]">
+                撤销上次导入
+              </button>
+            )}
           </div>
-          <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
+          <input ref={fileRef} aria-label="选择 JSON 备份文件" type="file" accept=".json" className="hidden" onChange={handleImportFile} />
           <p className="text-xs text-[#9B9B9B] mt-2 px-1">可按需导出训练记录、技巧笔记、运动配置和聊天记录，建议定期备份。</p>
         </div>
       </div>
@@ -886,7 +980,7 @@ export default function SettingsPage() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setDeleteTarget(null)}>
           <div className="bg-white rounded-t-3xl w-full max-w-lg p-6 pb-10" onClick={e => e.stopPropagation()}>
             <p className="text-base font-semibold text-[#1A1A1A] mb-1">删除「{deleteTarget.name}」？</p>
-            <p className="text-sm text-[#6B7280] mb-6">该运动下的所有训练记录也会一并删除，无法恢复。</p>
+            <p className="text-sm text-[#6B7280] mb-6">该运动下的训练记录、技巧笔记和聊天记录都会一并删除，无法恢复。</p>
             <div className="flex gap-3">
               <button
                 onClick={() => setDeleteTarget(null)}

@@ -4,7 +4,7 @@ import { getTechniques, saveTechnique, updateTechnique, deleteTechnique, getReco
 import { generateTechniques, parseExperienceText, hasApiKey, getGeneratedCache, setGeneratedCache, type GeneratedTechnique } from '../lib/ai'
 import type { TechniqueNote } from '../types'
 import PageHeader from '../components/PageHeader'
-import { useSport } from '../components/SportProvider'
+import { useSport } from '../contexts/SportContext'
 
 type Tab = 'user' | 'ai'
 
@@ -270,6 +270,7 @@ export default function TechniquePage() {
                 <input
                   type="text"
                   placeholder="搜索技巧…"
+                  aria-label="搜索技巧"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   className="w-full pl-8 pr-3 py-2 rounded-xl border border-[#E8E8E2] bg-white text-sm text-[#1A1A1A] outline-none focus:ring-2 focus:border-transparent"
@@ -420,6 +421,7 @@ export default function TechniquePage() {
       {/* 新建按钮（仅我的总结 Tab） */}
       {tab === 'user' && (
         <button onClick={openNew}
+          aria-label="新建技巧"
           className="fixed bottom-20 right-4 w-14 h-14 rounded-full flex items-center justify-center active:scale-90 transition-transform z-40"
           style={{ background: headerBg, boxShadow: `0 8px 24px ${sport.accentColor}55, 0 2px 8px rgba(0,0,0,0.15)` }}>
           <svg width="22" height="22" viewBox="0 0 22 22" fill="none">

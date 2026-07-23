@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { getRecords, getCoaches } from '../lib/storage'
 import type { TrainingRecord } from '../types'
-import TrainingCard, { getCoachColor } from '../components/TrainingCard'
-import { useSport } from '../components/SportProvider'
+import TrainingCard from '../components/TrainingCard'
+import { getCoachColor } from '../lib/recordPresentation'
+import { useSport } from '../contexts/SportContext'
 
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
 const COACH_COLORS = ['#E8A838', '#4A90D9', '#E85D5D', '#9B59B6', '#1ABC9C']
@@ -250,11 +251,13 @@ export default function CalendarPage() {
           {view === 'month' ? (
             <>
               <button onClick={() => { if (month === 0) { setYear(y => y - 1); setMonth(11) } else setMonth(m => m - 1); setSelected(null) }}
+                aria-label="上一个月"
                 className="w-9 h-9 flex items-center justify-center rounded-full bg-white/15 text-white">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </button>
               <h1 className="text-lg font-semibold text-white">{year} 年 {month + 1} 月</h1>
               <button onClick={() => { if (month === 11) { setYear(y => y + 1); setMonth(0) } else setMonth(m => m + 1); setSelected(null) }}
+                aria-label="下一个月"
                 className="w-9 h-9 flex items-center justify-center rounded-full bg-white/15 text-white">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </button>

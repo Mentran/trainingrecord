@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { saveRecord, updateRecord, getRecords, getCoaches, getActiveSportId } from '../lib/storage'
+import { saveRecord, updateRecord, getRecords, getCoaches } from '../lib/storage'
 import { polishText, hasApiKey } from '../lib/ai'
 import PageHeader from '../components/PageHeader'
-import { useSport } from '../components/SportProvider'
+import { useSport } from '../contexts/SportContext'
 
 function today(): string {
   return new Date().toISOString().slice(0, 10)
@@ -23,12 +23,17 @@ interface FormState {
 export default function RecordPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { sport } = useSport()
+  const { sport, sports } = useSport()
   const editId = searchParams.get('edit')
   const dateParam = searchParams.get('date')
+  const focusParam = searchParams.get('focus')
+  const tagParam = searchParams.get('tag')
 
-  // 使用运动的 categories 作为预设标签，没有则降级到空数组
-  const PRESET_TAGS = sport.categories ?? []
+  const editingRecord = editId ? getRecords().find(record => record.id === editId) : undefined
+  const formSport = editingRecord
+    ? (sports.find(item => item.id === editingRecord.sportId) ?? sport)
+    : sport
+  const PRESET_TAGS = formSport.categories ?? []
 
   const [form, setForm] = useState<FormState>({
     date: dateParam ?? today(),
@@ -36,7 +41,7 @@ export default function RecordPage() {
     coach: '',
     content: '',
     reflection: '',
-    tags: [],
+    tags: tagParam && !editId ? [tagParam] : [],
   })
   const [coaches, setCoaches] = useState<string[]>([])
   const [errors, setErrors] = useState<Partial<FormState>>({})
@@ -45,7 +50,7 @@ export default function RecordPage() {
   const [polishing, setPolishing] = useState(false)
 
   useEffect(() => {
-    setCoaches(getCoaches())
+    setCoaches(getCoaches(editingRecord?.sportId ?? sport.id))
     if (editId) {
       const record = getRecords().find(r => r.id === editId)
       if (record) {
@@ -62,7 +67,7 @@ export default function RecordPage() {
         }
       }
     }
-  }, [editId])
+  }, [editId, editingRecord?.sportId, sport.id])
 
   function set(field: keyof Omit<FormState, 'tags'>, value: string) {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -116,7 +121,7 @@ export default function RecordPage() {
       reflection: form.reflection.trim(),
       reflectionOriginal: form.reflection.trim(),
       polishStatus: 'none' as const,
-      sportId: getActiveSportId(),
+      sportId: editingRecord?.sportId ?? sport.id,
       tags: form.tags,
     }
     if (editId) {
@@ -141,10 +146,19 @@ export default function RecordPage() {
 
       <form onSubmit={handleSubmit} noValidate className="px-4 pt-5 flex flex-col gap-4">
 
+        {focusParam && !editId && (
+          <div className="rounded-2xl px-4 py-3 border"
+            style={{ background: sport.accentColor + '14', borderColor: sport.accentColor + '40' }}>
+            <p className="text-xs font-semibold mb-1" style={{ color: sport.color }}>今日关注</p>
+            <p className="text-sm leading-relaxed" style={{ color: sport.color }}>{focusParam}</p>
+          </div>
+        )}
+
         {/* 日期 */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">日期</label>
+          <label htmlFor="training-date" className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">日期</label>
           <input
+            id="training-date"
             type="date"
             value={form.date}
             onChange={e => set('date', e.target.value)}
@@ -183,6 +197,8 @@ export default function RecordPage() {
           ) : (
             <div className="flex gap-2 items-center">
               <input
+                id="training-duration"
+                aria-label="训练时长（分钟）"
                 type="number"
                 min="1"
                 max="480"
@@ -205,8 +221,9 @@ export default function RecordPage() {
 
         {/* 教练 */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">教练</label>
+          <label htmlFor="training-coach" className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">教练</label>
           <input
+            id="training-coach"
             type="text"
             placeholder="教练姓名"
             value={form.coach}
@@ -224,7 +241,7 @@ export default function RecordPage() {
         {/* 训练内容 */}
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">
+            <label htmlFor="training-content" className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">
               训练内容 <span className="text-red-400 normal-case">*</span>
             </label>
             {hasApiKey() && (
@@ -245,6 +262,7 @@ export default function RecordPage() {
             )}
           </div>
           <textarea
+            id="training-content"
             rows={5}
             placeholder="今天练了什么？教练重点纠正了哪些动作？"
             value={form.content}
@@ -256,8 +274,9 @@ export default function RecordPage() {
 
         {/* 感悟 */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">感悟</label>
+          <label htmlFor="training-reflection" className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">感悟</label>
           <textarea
+            id="training-reflection"
             rows={3}
             placeholder="有什么收获或者想法？"
             value={form.reflection}
@@ -268,7 +287,7 @@ export default function RecordPage() {
 
         {/* 标签 */}
         <div className="flex flex-col gap-2">
-          <label className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">标签</label>
+          <label htmlFor="training-custom-tag" className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">标签</label>
           <div className="flex flex-wrap gap-2">
             {PRESET_TAGS.map(tag => (
               <button
@@ -298,6 +317,7 @@ export default function RecordPage() {
           )}
           <div className="flex gap-2">
             <input
+              id="training-custom-tag"
               type="text"
               placeholder="自定义标签，回车添加"
               value={tagInput}

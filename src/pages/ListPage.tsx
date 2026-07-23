@@ -1,9 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { getRecords, getCoaches } from '../lib/storage'
-import type { TrainingRecord } from '../types'
-import TrainingCard, { getCoachColor } from '../components/TrainingCard'
-import { useSport } from '../components/SportProvider'
+import { getRecords, getCoaches, getTechniques, saveTechnique } from '../lib/storage'
+import { getRecommendedTrainingPrompt, type TennisKnowledgeCard } from '../data/tennisKnowledge'
+import { useToast } from '../contexts/ToastContext'
+import type { Sport, TrainingRecord } from '../types'
+import TrainingCard from '../components/TrainingCard'
+import { getCoachColor } from '../lib/recordPresentation'
+import { useSport } from '../contexts/SportContext'
+
+const TRAINING_PROMPT_EXPANDED_KEY = 'tennis-training-prompt-expanded'
 
 function formatGreeting() {
   const h = new Date().getHours()
@@ -23,14 +28,55 @@ function daysSinceLastTraining(records: TrainingRecord[]): number | null {
   return Math.floor((new Date(today).getTime() - new Date(last).getTime()) / 86400000)
 }
 
+function getInitialPromptExpanded() {
+  try {
+    return localStorage.getItem(TRAINING_PROMPT_EXPANDED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function isTennisSport(sport: Sport) {
+  return sport.id === 'tennis'
+    || sport.name.includes('网球')
+    || sport.icon.includes('🎾')
+    || (sport.categories.includes('正手') && sport.categories.includes('反手'))
+}
+
+function PromptVisual({ type, color }: { type: TennisKnowledgeCard['visualType']; color: string }) {
+  const isServe = type === 'serve'
+  const isFootwork = type === 'footwork'
+
+  return (
+    <div className="relative h-24 rounded-xl overflow-hidden bg-[#F5F5F0]">
+      <div className="absolute inset-2 rounded-lg border border-[#DADAD2]" />
+      <div className="absolute left-1/2 top-2 bottom-2 w-px bg-[#DADAD2]" />
+      <div className="absolute left-2 right-2 top-1/2 h-px bg-[#DADAD2]" />
+      <div className="absolute w-6 h-6 rounded-full border-2 bg-white"
+        style={{ borderColor: color, left: isServe ? '22%' : isFootwork ? '28%' : '34%', top: isServe ? '18%' : '52%' }} />
+      <div className="absolute w-3 h-3 rounded-full"
+        style={{ background: color, right: isServe ? '28%' : '22%', top: isServe ? '24%' : '38%' }} />
+      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 260 96" fill="none">
+        <path d={isServe ? 'M70 30 C105 8 150 16 188 30' : isFootwork ? 'M72 68 C102 50 126 50 158 40' : 'M86 64 C120 44 150 36 188 36'}
+          stroke={color} strokeWidth="3" strokeLinecap="round" strokeDasharray={isFootwork ? '5 6' : '0'} />
+        <path d="M178 31l12 4-10 7" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <div className="absolute left-3 bottom-2 text-[10px] text-[#9B9B9B]">击球点 / 线路 / 回位</div>
+    </div>
+  )
+}
+
 export default function ListPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { sport, sports, switchSport } = useSport()
+  const { showToast } = useToast()
   const [records, setRecords] = useState<TrainingRecord[]>([])
   const [coaches, setCoaches] = useState<string[]>([])
   const [filter, setFilter] = useState('')
   const [tagFilter, setTagFilter] = useState('')
+  const [promptOffset, setPromptOffset] = useState(0)
+  const [promptExpanded, setPromptExpanded] = useState(getInitialPromptExpanded)
 
   useEffect(() => {
     setRecords(getRecords(sport.id))
@@ -49,9 +95,45 @@ export default function ListPage() {
   const headerBg = `linear-gradient(150deg, ${sport.color} 0%, ${sport.color}e0 60%, ${sport.accentColor}55 100%)`
 
   const allTags = Array.from(new Set(records.flatMap(r => r.tags ?? [])))
+  const trainingPrompt = isTennisSport(sport) ? getRecommendedTrainingPrompt(sport.level ?? '2.0', records, promptOffset) : null
   const filtered = records
     .filter(r => !filter || r.coach === filter)
     .filter(r => !tagFilter || (r.tags ?? []).includes(tagFilter))
+
+  function handleCollectPrompt(card: TennisKnowledgeCard) {
+    const exists = getTechniques(sport.id).some(note => note.title === card.title && note.category === card.category)
+    if (exists) {
+      showToast('这条提示已经在技巧笔记里')
+      return
+    }
+    saveTechnique({
+      sportId: sport.id,
+      title: card.title,
+      content: `${card.fact}\n\n为什么重要：${card.why}\n\n练习：${card.drill}\n\n记录关注：${card.focus}`,
+      source: 'user',
+      category: card.category,
+      tags: [card.level, '训练提示'],
+      votes: 0,
+    })
+    showToast('已收藏到技巧笔记')
+  }
+
+  function handleUsePrompt(card: TennisKnowledgeCard) {
+    const params = new URLSearchParams({ focus: card.focus, tag: card.category })
+    navigate(`/record?${params.toString()}`)
+  }
+
+  function togglePromptExpanded() {
+    setPromptExpanded(prev => {
+      const next = !prev
+      try {
+        localStorage.setItem(TRAINING_PROMPT_EXPANDED_KEY, next ? '1' : '0')
+      } catch {
+        // localStorage 不可用时只保留本次页面状态
+      }
+      return next
+    })
+  }
 
   return (
     <div className="pb-8">
@@ -64,6 +146,7 @@ export default function ListPage() {
 
         {/* 右上角设置按钮 */}
         <button onClick={() => navigate('/settings')}
+          aria-label="打开设置"
           className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full z-10"
           style={{ background: 'rgba(255,255,255,0.15)' }}>
           <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
@@ -146,6 +229,73 @@ export default function ListPage() {
 
       {/* 筛选 + 列表 */}
       <div className="px-4 pt-4">
+        {trainingPrompt && (
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xs font-semibold text-[#ADADAD] uppercase tracking-widest">今日训练提示</h2>
+              <button onClick={togglePromptExpanded}
+                className="text-xs font-semibold" style={{ color: sport.accentColor }}>
+                {promptExpanded ? '收起' : '展开'}
+              </button>
+            </div>
+            <div className="bg-white rounded-2xl card-shadow overflow-hidden">
+              <button type="button" onClick={togglePromptExpanded}
+                className="w-full p-4 text-left flex items-center gap-3 active:bg-[#FAFAF7] transition-colors">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="px-2.5 py-1 rounded-full text-xs font-semibold text-white" style={{ background: sport.color }}>
+                      {trainingPrompt.level}
+                    </span>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-medium"
+                      style={{ background: sport.accentColor + '22', color: sport.color }}>
+                      {trainingPrompt.category}
+                    </span>
+                  </div>
+                  <p className="text-base font-semibold text-[#1A1A1A] truncate">{trainingPrompt.title}</p>
+                  <p className="text-sm text-[#6B7280] leading-relaxed mt-1 line-clamp-2">{trainingPrompt.fact}</p>
+                </div>
+                <svg className={`shrink-0 transition-transform ${promptExpanded ? 'rotate-180' : ''}`}
+                  width="18" height="18" viewBox="0 0 20 20" fill="none">
+                  <path d="M5 7.5l5 5 5-5" stroke="#9B9B9B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              {promptExpanded && (
+                <>
+                  <div className="px-4 pb-4 flex flex-col gap-3">
+                    <div className="flex justify-end">
+                      <button onClick={() => setPromptOffset(v => v + 1)}
+                        className="text-xs font-semibold" style={{ color: sport.accentColor }}>
+                        换一条
+                      </button>
+                    </div>
+                <PromptVisual type={trainingPrompt.visualType} color={sport.accentColor} />
+                <div className="grid gap-2">
+                  <div className="rounded-xl bg-[#FAFAF7] px-3 py-2">
+                    <p className="text-[11px] font-semibold text-[#9B9B9B] mb-0.5">今天练什么</p>
+                    <p className="text-xs text-[#6B7280] leading-relaxed">{trainingPrompt.drill}</p>
+                  </div>
+                  <div className="rounded-xl px-3 py-2" style={{ background: sport.accentColor + '14' }}>
+                    <p className="text-[11px] font-semibold mb-0.5" style={{ color: sport.color }}>记录时关注</p>
+                    <p className="text-xs leading-relaxed" style={{ color: sport.color }}>{trainingPrompt.focus}</p>
+                  </div>
+                </div>
+                  </div>
+                  <div className="flex border-t border-[#E8E8E2]">
+                    <button onClick={() => handleCollectPrompt(trainingPrompt)}
+                      className="flex-1 py-3 text-sm font-semibold" style={{ color: sport.accentColor }}>
+                      收藏到技巧笔记
+                    </button>
+                    <button onClick={() => handleUsePrompt(trainingPrompt)}
+                      className="flex-1 py-3 text-sm font-medium border-l border-[#E8E8E2] text-[#6B7280]">
+                      设为今日关注
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* 教练筛选 */}
         {coaches.length > 0 && (
           <div className="flex gap-2 mb-3 overflow-x-auto pb-1 -mx-4 px-4 scrollbar-none">

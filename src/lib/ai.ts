@@ -70,6 +70,7 @@ interface CallOptions {
   system?: string
   messages: Array<{ role: string; content: string }>
   stream?: boolean
+  signal?: AbortSignal
 }
 
 function buildBody(config: AIConfig, opts: CallOptions): Record<string, unknown> {
@@ -97,9 +98,15 @@ async function doFetch(config: AIConfig, opts: CallOptions): Promise<Response> {
   const url = resolveUrl(config)
   if (!config.apiUrl.startsWith('http')) throw new Error('API URL 格式不正确，需以 http:// 或 https:// 开头')
   try {
-    return await fetch(url, { method: 'POST', headers: buildHeaders(config), body: JSON.stringify(buildBody(config, opts)) })
-  } catch {
-    throw new Error(`无法连接到 API（${url}）\n可能原因：\n① 转接服务不支持浏览器直接访问（CORS 限制）\n② URL 填写有误\n③ 网络问题`)
+    return await fetch(url, {
+      method: 'POST',
+      headers: buildHeaders(config),
+      body: JSON.stringify(buildBody(config, opts)),
+      signal: opts.signal,
+    })
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') throw error
+    throw new Error(`无法连接到 API（${url}）\n可能原因：\n① 转接服务不支持浏览器直接访问（CORS 限制）\n② URL 填写有误\n③ 网络问题`, { cause: error })
   }
 }
 
@@ -353,6 +360,7 @@ export interface ChatMessage {
 
 export interface Conversation {
   id: string
+  sportId: string
   title: string
   messages: ChatMessage[]
   createdAt: string
@@ -368,10 +376,21 @@ function setSyncedLocalItem(key: string, value: string): void {
   scheduleLocalFileSync()
 }
 
-export function getConversations(): Conversation[] {
+export function getConversations(sportId?: string): Conversation[] {
   try {
     const raw = localStorage.getItem(CONVERSATIONS_KEY)
-    if (raw) return JSON.parse(raw) as Conversation[]
+    if (raw) {
+      const stored = JSON.parse(raw) as Array<Conversation | Omit<Conversation, 'sportId'>>
+      const migrated = stored.map(conversation => (
+        'sportId' in conversation && conversation.sportId
+          ? conversation as Conversation
+          : { ...conversation, sportId: 'tennis' }
+      ))
+      if (migrated.some((conversation, index) => !('sportId' in stored[index]) || conversation !== stored[index])) {
+        setSyncedLocalItem(CONVERSATIONS_KEY, JSON.stringify(migrated))
+      }
+      return sportId ? migrated.filter(conversation => conversation.sportId === sportId) : migrated
+    }
   } catch { /* ignore */ }
   // 迁移旧数据
   try {
@@ -381,6 +400,7 @@ export function getConversations(): Conversation[] {
       if (msgs.length > 0) {
         const conv: Conversation = {
           id: `conv-${Date.now()}`,
+          sportId: 'tennis',
           title: msgs.find(m => m.role === 'user')?.content.slice(0, 20) ?? '历史对话',
           messages: msgs,
           createdAt: msgs[0].createdAt,
@@ -388,7 +408,7 @@ export function getConversations(): Conversation[] {
         }
         setSyncedLocalItem(CONVERSATIONS_KEY, JSON.stringify([conv]))
         localStorage.removeItem(LEGACY_CHAT_KEY)
-        return [conv]
+        return !sportId || sportId === 'tennis' ? [conv] : []
       }
     }
   } catch { /* ignore */ }
@@ -408,12 +428,29 @@ export function deleteConversation(id: string): void {
   setSyncedLocalItem(CONVERSATIONS_KEY, JSON.stringify(list))
 }
 
-export function getActiveConvId(): string | null {
-  return localStorage.getItem(ACTIVE_CONV_KEY)
+function activeConversationKey(sportId: string): string {
+  return `${ACTIVE_CONV_KEY}:${sportId}`
 }
 
-export function setActiveConvId(id: string): void {
-  setSyncedLocalItem(ACTIVE_CONV_KEY, id)
+export function getActiveConvId(sportId = 'tennis'): string | null {
+  const scoped = localStorage.getItem(activeConversationKey(sportId))
+  if (scoped) return scoped
+  if (sportId !== 'tennis') return null
+  const legacy = localStorage.getItem(ACTIVE_CONV_KEY)
+  if (legacy) {
+    setSyncedLocalItem(activeConversationKey(sportId), legacy)
+    localStorage.removeItem(ACTIVE_CONV_KEY)
+  }
+  return legacy
+}
+
+export function setActiveConvId(id: string, sportId = 'tennis'): void {
+  setSyncedLocalItem(activeConversationKey(sportId), id)
+}
+
+export function clearActiveConvId(sportId = 'tennis'): void {
+  localStorage.removeItem(activeConversationKey(sportId))
+  scheduleLocalFileSync()
 }
 
 // ── System prompt ────────────────────────────────────────
@@ -466,11 +503,13 @@ export async function streamChatMessage(
   techniques: TechniqueNote[],
   onChunk: (text: string) => void,
   sportName = '运动',
+  signal?: AbortSignal,
 ): Promise<void> {
   const config = getAIConfig()
   const opts: CallOptions = {
     max_tokens: 1024,
     stream: true,
+    signal,
     system: buildSystemPrompt(sportName) + buildContext(records, techniques),
     messages: [
       ...history.map(m => ({ role: m.role, content: m.content })),
@@ -540,5 +579,5 @@ export async function sendChatMessage(
 
 // Legacy chat history helpers (kept for any remaining references)
 export function getChatHistory(): ChatMessage[] { return [] }
-export function saveChatHistory(_messages: ChatMessage[]): void { /* migrated to conversations */ }
+export function saveChatHistory(messages: ChatMessage[]): void { void messages /* migrated to conversations */ }
 export function clearChatHistory(): void { localStorage.removeItem(LEGACY_CHAT_KEY) }

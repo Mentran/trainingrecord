@@ -1,24 +1,7 @@
-import { createContext, useContext, useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import type { Sport } from '../types'
 import { getActiveSport, getActiveSportId, setActiveSportId, getSports } from '../lib/storage'
-
-interface SportContextValue {
-  sport: Sport
-  sports: Sport[]
-  switchSport: (id: string) => void
-  refreshSports: () => void
-}
-
-const SportContext = createContext<SportContextValue>({
-  sport: { id: 'tennis', name: '网球', icon: '🎾', color: '#1A2E1A', accentColor: '#9DC41A', categories: [], createdAt: '' },
-  sports: [],
-  switchSport: () => {},
-  refreshSports: () => {},
-})
-
-export function useSport() {
-  return useContext(SportContext)
-}
+import { SportContext } from '../contexts/SportContext'
 
 export function SportProvider({ children }: { children: React.ReactNode }) {
   const [sport, setSport] = useState<Sport>(getActiveSport)

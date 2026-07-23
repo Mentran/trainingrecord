@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getRecords, deleteRecord, getCoaches, updateRecord } from '../lib/storage'
 import { hasApiKey, polishText } from '../lib/ai'
-import { useToast } from '../components/ToastProvider'
-import { getCoachColor } from '../components/TrainingCard'
-import { useSport } from '../components/SportProvider'
+import { useToast } from '../contexts/ToastContext'
+import { getCoachColor } from '../lib/recordPresentation'
+import { useSport } from '../contexts/SportContext'
 
 function formatDate(date: string) {
   const d = new Date(date + 'T00:00:00')

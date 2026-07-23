@@ -2,11 +2,11 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   hasApiKey, streamChatMessage, getConversations, saveConversation,
-  deleteConversation, getActiveConvId, setActiveConvId,
+  deleteConversation, getActiveConvId, setActiveConvId, clearActiveConvId,
   type ChatMessage, type Conversation,
 } from '../lib/ai'
 import { getRecords, getTechniques } from '../lib/storage'
-import { useSport } from '../components/SportProvider'
+import { useSport } from '../contexts/SportContext'
 
 function generateId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
@@ -94,15 +94,15 @@ export default function ChatPage() {
   const navigate = useNavigate()
   const { sport } = useSport()
 
-  const [conversations, setConversations] = useState<Conversation[]>(getConversations)
+  const [conversations, setConversations] = useState<Conversation[]>(() => getConversations(sport.id))
   const [activeConvId, setActiveConvIdState] = useState<string | null>(() => {
-    const id = getActiveConvId()
-    const convs = getConversations()
+    const id = getActiveConvId(sport.id)
+    const convs = getConversations(sport.id)
     return convs.find(c => c.id === id) ? id : (convs[0]?.id ?? null)
   })
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    const id = getActiveConvId()
-    const convs = getConversations()
+    const id = getActiveConvId(sport.id)
+    const convs = getConversations(sport.id)
     const active = convs.find(c => c.id === id) ?? convs[0]
     return active?.messages ?? []
   })
@@ -116,6 +116,7 @@ export default function ChatPage() {
   const streamFlushTimerRef = useRef<number | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const requestControllerRef = useRef<AbortController | null>(null)
 
   const activeConv = conversations.find(c => c.id === activeConvId)
 
@@ -131,7 +132,22 @@ export default function ChatPage() {
   }, [input])
 
   useEffect(() => {
+    requestControllerRef.current?.abort()
+    const nextConversations = getConversations(sport.id)
+    const storedId = getActiveConvId(sport.id)
+    const nextActive = nextConversations.find(conversation => conversation.id === storedId) ?? nextConversations[0]
+    setConversations(nextConversations)
+    setActiveConvIdState(nextActive?.id ?? null)
+    setMessages(nextActive?.messages ?? [])
+    setFollowUps([])
+    setStreamingText('')
+    streamingRef.current = ''
+    setLoading(false)
+  }, [sport.id])
+
+  useEffect(() => {
     return () => {
+      requestControllerRef.current?.abort()
       if (streamFlushTimerRef.current !== null) {
         window.clearTimeout(streamFlushTimerRef.current)
       }
@@ -142,7 +158,7 @@ export default function ChatPage() {
     const conv = conversations.find(c => c.id === id)
     if (!conv) return
     setActiveConvIdState(id)
-    setActiveConvId(id)
+    setActiveConvId(id, sport.id)
     setMessages(conv.messages)
     setFollowUps([])
     setStreamingText('')
@@ -151,6 +167,7 @@ export default function ChatPage() {
   }
 
   function newConversation() {
+    clearActiveConvId(sport.id)
     setActiveConvIdState(null)
     setMessages([])
     setFollowUps([])
@@ -169,7 +186,7 @@ export default function ChatPage() {
 
   function handleDeleteConv(id: string) {
     deleteConversation(id)
-    const updated = getConversations()
+    const updated = getConversations(sport.id)
     setConversations(updated)
     if (id === activeConvId) {
       if (updated.length > 0) switchConversation(updated[0].id)
@@ -191,12 +208,15 @@ export default function ChatPage() {
     setStreamingText('')
 
     try {
+      const controller = new AbortController()
+      requestControllerRef.current?.abort()
+      requestControllerRef.current = controller
       const records = getRecords(sport.id)
       const techniques = getTechniques(sport.id)
       await streamChatMessage(content, messages, records, techniques, (chunk) => {
         streamingRef.current += chunk
         flushStreamingText()
-      }, sport.name)
+      }, sport.name, controller.signal)
 
       if (streamFlushTimerRef.current !== null) {
         window.clearTimeout(streamFlushTimerRef.current)
@@ -214,19 +234,21 @@ export default function ChatPage() {
       if (!convId) {
         convId = `conv-${Date.now()}`
         setActiveConvIdState(convId)
-        setActiveConvId(convId)
+        setActiveConvId(convId, sport.id)
       }
       const title = content.slice(0, 20)
       const conv: Conversation = {
         id: convId,
+        sportId: sport.id,
         title: activeConv?.title ?? title,
         messages: finalMessages,
         createdAt: activeConv?.createdAt ?? now,
         updatedAt: now,
       }
       saveConversation(conv)
-      setConversations(getConversations())
+      setConversations(getConversations(sport.id))
     } catch (e) {
+      if ((e as Error).name === 'AbortError') return
       const errMsg: ChatMessage = {
         id: generateId(), role: 'assistant',
         content: `抱歉，出现了错误：${(e as Error).message}`,
@@ -239,10 +261,11 @@ export default function ChatPage() {
         streamFlushTimerRef.current = null
       }
       setLoading(false)
+      requestControllerRef.current = null
       setStreamingText('')
       streamingRef.current = ''
     }
-  }, [loading, messages, activeConvId, activeConv])
+  }, [loading, messages, activeConvId, activeConv, sport.id, sport.name])
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input) }
@@ -270,6 +293,7 @@ export default function ChatPage() {
             </button>
             <button
               onClick={() => setShowHistory(true)}
+              aria-label="查看历史对话"
               className="w-8 h-8 flex items-center justify-center rounded-full bg-white/15 text-white"
             >
               <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
@@ -381,12 +405,14 @@ export default function ChatPage() {
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="输入问题，Enter 发送…"
+              aria-label="向运动顾问提问"
               rows={1}
               disabled={loading}
               className="flex-1 resize-none outline-none text-sm text-[#1A1A1A] placeholder:text-[#9B9B9B] bg-transparent py-1 overflow-hidden"
               style={{ minHeight: '24px', maxHeight: '128px' }}
             />
             <button onClick={() => send(input)} disabled={!input.trim() || loading}
+              aria-label="发送消息"
               className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 disabled:opacity-30 transition active:scale-95"
               style={{ background: headerBg }}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -407,6 +433,7 @@ export default function ChatPage() {
               style={{ background: headerBg }}>
               <h2 className="text-base font-semibold text-white">历史对话</h2>
               <button onClick={() => setShowHistory(false)}
+                aria-label="关闭历史对话"
                 className="w-7 h-7 flex items-center justify-center rounded-full bg-white/15 text-white">
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                   <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
@@ -432,6 +459,7 @@ export default function ChatPage() {
                       <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: sport.accentColor }} />
                     )}
                     <button onClick={e => { e.stopPropagation(); handleDeleteConv(conv.id) }}
+                      aria-label={`删除对话：${conv.title}`}
                       className="w-6 h-6 flex items-center justify-center rounded-lg text-[#ADADAD] active:text-red-400 shrink-0">
                       <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                         <path d="M2 3h8M5 3V2.5a.5.5 0 01.5-.5h1a.5.5 0 01.5.5V3M4.5 3l.5 6M7.5 3l-.5 6M2.5 3l.5 6.5a.5.5 0 00.5.5h5a.5.5 0 00.5-.5L9.5 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
