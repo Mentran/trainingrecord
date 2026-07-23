@@ -4,6 +4,8 @@ import tailwindcss from '@tailwindcss/vite'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import type { Plugin } from 'vite'
+import { parseLocalFileData } from './src/lib/localFileSchema'
+import { readRequestBody, RequestBodyTooLargeError } from './localFileServer'
 
 const DATA_DIR = path.resolve(process.cwd(), 'data')
 const DATA_FILE = path.join(DATA_DIR, 'app-data.json')
@@ -15,14 +17,6 @@ function sendJson(res: { statusCode: number; setHeader: (name: string, value: st
   res.statusCode = status
   res.setHeader('Content-Type', 'application/json; charset=utf-8')
   res.end(JSON.stringify(data))
-}
-
-async function readBody(req: NodeJS.ReadableStream): Promise<string> {
-  const chunks: Buffer[] = []
-  for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-  }
-  return Buffer.concat(chunks).toString('utf8')
 }
 
 function backupName(): string {
@@ -80,9 +74,10 @@ function localFileStorePlugin(): Plugin {
           if (req.method === 'GET') {
             try {
               const raw = await fs.readFile(DATA_FILE, 'utf8')
+              const data = parseLocalFileData(JSON.parse(raw))
               sendJson(res, 200, {
                 exists: true,
-                data: JSON.parse(raw),
+                data,
                 path: DATA_FILE,
                 backupsPath: BACKUP_DIR,
               })
@@ -98,8 +93,14 @@ function localFileStorePlugin(): Plugin {
           }
 
           if (req.method === 'POST') {
-            const body = await readBody(req)
-            const parsed = JSON.parse(body) as Record<string, unknown>
+            const body = await readRequestBody(req)
+            let parsed
+            try {
+              parsed = parseLocalFileData(JSON.parse(body))
+            } catch (error) {
+              sendJson(res, 400, { error: `本地数据格式无效：${(error as Error).message}` })
+              return
+            }
             const nextContent = JSON.stringify(parsed, null, 2)
             await backupExistingFile(nextContent)
             await fs.writeFile(`${DATA_FILE}.tmp`, nextContent)
@@ -116,6 +117,10 @@ function localFileStorePlugin(): Plugin {
 
           sendJson(res, 405, { error: 'Method not allowed' })
         } catch (error) {
+          if (error instanceof RequestBodyTooLargeError) {
+            sendJson(res, 413, { error: error.message })
+            return
+          }
           server.config.logger.error((error as Error).stack ?? String(error))
           sendJson(res, 500, { error: (error as Error).message })
         }

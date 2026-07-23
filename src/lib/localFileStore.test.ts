@@ -52,4 +52,20 @@ describe('local file conflict resolution', () => {
     expect(status.source).toBe('file')
     expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.records) ?? '[]')[0].content).toBe('新文件')
   })
+
+  it('服务端返回损坏数据时保留浏览器缓存', async () => {
+    localStorage.setItem(STORAGE_KEYS.records, JSON.stringify([{ id: 'browser' }]))
+    const payload = filePayload('2026-07-10T10:00:00.000Z', '损坏文件')
+    payload.data.records[0].duration = '60' as unknown as number
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })))
+
+    const { initializeLocalFileStore } = await import('./localFileStore')
+    const status = await initializeLocalFileStore()
+
+    expect(status.available).toBe(false)
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.records) ?? '[]')[0].id).toBe('browser')
+  })
 })

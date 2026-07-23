@@ -1,18 +1,10 @@
 import type { Conversation } from './ai'
+import { localFileReadResponseSchema, localFileWriteResponseSchema } from './localFileSchema'
+import type { LocalFileData } from './localFileSchema'
 import { STORAGE_KEYS } from './storageKeys'
 import type { Sport, TechniqueNote, TrainingRecord } from '../types'
 
-export interface LocalFileData {
-  version: 1 | 2
-  savedAt: string
-  records: TrainingRecord[]
-  techniques: TechniqueNote[]
-  sports: Sport[]
-  conversations: Conversation[]
-  activeSportId?: string
-  activeConversationId?: string
-  activeConversationIds?: Record<string, string>
-}
+export type { LocalFileData } from './localFileSchema'
 
 export interface LocalFileStoreStatus {
   available: boolean
@@ -145,13 +137,13 @@ async function writeLocalFileNow(): Promise<void> {
       body: JSON.stringify(collectLocalData()),
     })
     if (!res.ok) throw new Error(`本地文件写入失败：${res.status}`)
-    const next = await res.json() as { savedAt?: string; path?: string; backupsPath?: string }
+    const next = localFileWriteResponseSchema.parse(await res.json())
     status = {
       ...status,
       available: true,
       path: next.path ?? status.path,
       backupsPath: next.backupsPath ?? status.backupsPath,
-      lastSavedAt: next.savedAt ?? new Date().toISOString(),
+      lastSavedAt: next.savedAt,
       error: undefined,
     }
   } catch (error) {
@@ -183,12 +175,7 @@ export async function initializeLocalFileStore(): Promise<LocalFileStoreStatus> 
   try {
     const res = await fetchWithTimeout('/api/local-store', { cache: 'no-store' })
     if (!res.ok) throw new Error(`本地文件服务不可用：${res.status}`)
-    const payload = await res.json() as {
-      exists: boolean
-      data?: LocalFileData
-      path: string
-      backupsPath: string
-    }
+    const payload = localFileReadResponseSchema.parse(await res.json())
 
     available = true
     initialized = true
