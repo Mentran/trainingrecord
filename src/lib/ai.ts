@@ -1,6 +1,22 @@
 import type { TrainingRecord, TechniqueNote } from '../types'
 import { scheduleLocalFileSync } from './localFileStore'
 import { STORAGE_KEYS } from './storageKeys'
+import { AIError, isAIError } from './aiErrors'
+import {
+  aiConfigSchema,
+  categorizedTechniquesSchema,
+  extractAPIErrorMessage,
+  extractProviderText,
+  extractStreamText,
+  generatedTechniqueCacheSchema,
+  generatedTechniquesSchema,
+  parseAIJson,
+  polishResultSchema,
+  sportCategoriesSchema,
+} from './aiSchemas'
+import type { GeneratedTechnique } from './aiSchemas'
+
+export type { GeneratedTechnique } from './aiSchemas'
 
 const CONFIG_KEY = 'ai_config'
 const LEGACY_KEY = 'claude_api_key'
@@ -23,7 +39,13 @@ const DEFAULTS: AIConfig = {
 export function getAIConfig(): AIConfig {
   try {
     const raw = localStorage.getItem(CONFIG_KEY)
-    if (raw) return { ...DEFAULTS, ...(JSON.parse(raw) as Partial<AIConfig>) }
+    if (raw) {
+      const stored: unknown = JSON.parse(raw)
+      if (stored && typeof stored === 'object') {
+        const parsed = aiConfigSchema.safeParse({ ...DEFAULTS, ...stored })
+        if (parsed.success) return parsed.data
+      }
+    }
   } catch { /* ignore */ }
   const legacyKey = localStorage.getItem(LEGACY_KEY) ?? ''
   return { ...DEFAULTS, apiKey: legacyKey }
@@ -71,7 +93,17 @@ interface CallOptions {
   messages: Array<{ role: string; content: string }>
   stream?: boolean
   signal?: AbortSignal
+  timeoutMs?: number
 }
+
+interface FetchResult {
+  response: Response
+  cleanup: () => void
+  didTimeout: () => boolean
+}
+
+const DEFAULT_REQUEST_TIMEOUT_MS = 45_000
+const STREAM_REQUEST_TIMEOUT_MS = 120_000
 
 function buildBody(config: AIConfig, opts: CallOptions): Record<string, unknown> {
   if (isAnthropicFormat(config)) {
@@ -94,56 +126,90 @@ function buildBody(config: AIConfig, opts: CallOptions): Record<string, unknown>
   }
 }
 
-async function doFetch(config: AIConfig, opts: CallOptions): Promise<Response> {
+function createRequestSignal(externalSignal: AbortSignal | undefined, timeoutMs: number) {
+  const controller = new AbortController()
+  let timedOut = false
+  const handleExternalAbort = () => controller.abort(externalSignal?.reason)
+  if (externalSignal?.aborted) handleExternalAbort()
+  else externalSignal?.addEventListener('abort', handleExternalAbort, { once: true })
+
+  const timeoutId = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeoutMs)
+
+  return {
+    signal: controller.signal,
+    didTimeout: () => timedOut,
+    cleanup: () => {
+      clearTimeout(timeoutId)
+      externalSignal?.removeEventListener('abort', handleExternalAbort)
+    },
+  }
+}
+
+async function doFetch(config: AIConfig, opts: CallOptions): Promise<FetchResult> {
   const url = resolveUrl(config)
-  if (!config.apiUrl.startsWith('http')) throw new Error('API URL 格式不正确，需以 http:// 或 https:// 开头')
+  if (!/^https?:\/\//i.test(config.apiUrl)) {
+    throw new AIError('invalid_config', 'API URL 格式不正确，需以 http:// 或 https:// 开头')
+  }
+  const request = createRequestSignal(
+    opts.signal,
+    opts.timeoutMs ?? (opts.stream ? STREAM_REQUEST_TIMEOUT_MS : DEFAULT_REQUEST_TIMEOUT_MS),
+  )
   try {
-    return await fetch(url, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: buildHeaders(config),
       body: JSON.stringify(buildBody(config, opts)),
-      signal: opts.signal,
+      signal: request.signal,
     })
+    return { response, cleanup: request.cleanup, didTimeout: request.didTimeout }
   } catch (error) {
-    if ((error as Error).name === 'AbortError') throw error
-    throw new Error(`无法连接到 API（${url}）\n可能原因：\n① 转接服务不支持浏览器直接访问（CORS 限制）\n② URL 填写有误\n③ 网络问题`, { cause: error })
+    request.cleanup()
+    if (request.didTimeout()) {
+      throw new AIError('timeout', 'AI 请求超时，请稍后重试', { cause: error })
+    }
+    if (opts.signal?.aborted || (error as Error).name === 'AbortError') {
+      throw new AIError('cancelled', 'AI 请求已取消', { cause: error })
+    }
+    throw new AIError(
+      'network',
+      `无法连接到 API（${url}）\n可能原因：\n① 转接服务不支持浏览器直接访问（CORS 限制）\n② URL 填写有误\n③ 网络问题`,
+      { cause: error },
+    )
   }
 }
 
 // ── Non-streaming call (used by polishText) ──────────────
 
 async function callAPI(config: AIConfig, opts: CallOptions): Promise<string> {
-  const res = await doFetch(config, opts)
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    const msg = (err as { error?: { message?: string } }).error?.message
-    throw new Error(msg ?? `API 错误 ${res.status}`)
-  }
-  const data = await res.json() as Record<string, unknown>
-  // Anthropic: content is array of blocks
-  if (Array.isArray(data.content) && data.content.length > 0) {
-    const blocks = data.content as Array<Record<string, unknown>>
-    // standard: find text block
-    const textBlock = blocks.find(b => b.type === 'text')
-    if (textBlock?.text !== undefined) return textBlock.text as string
-    // fallback: first block with any text field
-    for (const b of blocks) {
-      if (typeof b.text === 'string') return b.text
+  const request = await doFetch(config, opts)
+  try {
+    const data: unknown = await request.response.json()
+    if (!request.response.ok) {
+      throw new AIError(
+        'http',
+        extractAPIErrorMessage(data) ?? `API 错误 ${request.response.status}`,
+        { status: request.response.status },
+      )
     }
-    // fallback: first block stringified
-    const first = blocks[0]
-    if (typeof first === 'string') return first
+    return extractProviderText(data)
+  } catch (error) {
+    if (isAIError(error)) throw error
+    if (request.didTimeout()) {
+      throw new AIError('timeout', 'AI 请求超时，请稍后重试', { cause: error })
+    }
+    if (opts.signal?.aborted || (error as Error).name === 'AbortError') {
+      throw new AIError('cancelled', 'AI 请求已取消', { cause: error })
+    }
+    if (error instanceof SyntaxError) {
+      throw new AIError('response_format', 'API 返回的不是有效 JSON', { cause: error })
+    }
+    throw new AIError('network', '读取 API 返回时连接中断，请重试', { cause: error })
+  } finally {
+    request.cleanup()
   }
-  // Some proxies return content as a plain string
-  if (typeof data.content === 'string' && data.content) return data.content
-  // OpenAI: choices array
-  if (Array.isArray(data.choices)) {
-    const text = (data.choices as Array<{ message: { content: string } }>)[0]?.message?.content
-    if (text !== undefined) return text
-  }
-  // output field (some relay formats)
-  if (typeof data.output === 'string' && data.output) return data.output
-  throw new Error(`API 返回格式无法识别（收到字段：${Object.keys(data).join(', ')}）\n请检查 API URL 和格式设置是否正确`)
 }
 
 // ── Polish ───────────────────────────────────────────────
@@ -161,21 +227,10 @@ ${reflection ? `感悟：\n${reflection}` : ''}
 {"content":"润色后的训练内容","reflection":"润色后的感悟"}`
 
   const data = await callAPI(config, { max_tokens: 1024, messages: [{ role: 'user', content: prompt }] })
-  try {
-    return JSON.parse(data) as { content: string; reflection: string }
-  } catch {
-    throw new Error('AI 返回格式异常，请重试')
-  }
+  return parseAIJson(data, polishResultSchema, 'AI 润色返回')
 }
 
 // ── Generate techniques ──────────────────────────────────
-
-export interface GeneratedTechnique {
-  title: string
-  content: string
-  category?: string
-  tags: string[]
-}
 
 export interface GeneratedTechniqueCache {
   sportId: string
@@ -187,7 +242,7 @@ export function getGeneratedCache(sportId: string): GeneratedTechniqueCache | nu
   try {
     const raw = localStorage.getItem(GENERATED_CACHE_KEY)
     if (!raw) return null
-    const cache = JSON.parse(raw) as GeneratedTechniqueCache
+    const cache = generatedTechniqueCacheSchema.parse(JSON.parse(raw))
     return cache.sportId === sportId ? cache : null
   } catch {
     return null
@@ -254,12 +309,10 @@ ${recordSummary}
 [{"title":"动作名称","content":"技术要点说明","category":"分类名","tags":["细分标签1","细分标签2"]}]`
 
   const data = await callAPI(config, { max_tokens: 1500, messages: [{ role: 'user', content: prompt }] })
-  try {
-    const cleaned = data.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
-    return normalizeGeneratedTechniques(JSON.parse(cleaned) as GeneratedTechnique[], categories)
-  } catch {
-    throw new Error('AI 返回格式异常，请重试')
-  }
+  return normalizeGeneratedTechniques(
+    parseAIJson(data, generatedTechniquesSchema, 'AI 技巧返回'),
+    categories,
+  )
 }
 
 // ── Generate sport categories ────────────────────────────
@@ -277,12 +330,7 @@ export async function generateSportCategories(sportName: string): Promise<string
 ["分类1","分类2","分类3"]`
 
   const data = await callAPI(config, { max_tokens: 512, messages: [{ role: 'user', content: prompt }] })
-  try {
-    const cleaned = data.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
-    return JSON.parse(cleaned) as string[]
-  } catch {
-    throw new Error('AI 返回格式异常，请重试')
-  }
+  return parseAIJson(data, sportCategoriesSchema, 'AI 分类返回')
 }
 
 export async function categorizeTechniques(
@@ -302,12 +350,14 @@ ${noteList}
 [{"id":"笔记id","category":"分类名"}]`
 
   const data = await callAPI(config, { max_tokens: 1000, messages: [{ role: 'user', content: prompt }] })
-  try {
-    const cleaned = data.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
-    return JSON.parse(cleaned) as Array<{ id: string; category: string }>
-  } catch {
-    throw new Error('AI 返回格式异常，请重试')
+  const parsed = parseAIJson(data, categorizedTechniquesSchema, 'AI 归类返回')
+  const allowedIds = new Set(notes.map(note => note.id))
+  const allowedCategories = new Set(categories)
+  const invalid = parsed.find(item => !allowedIds.has(item.id) || !allowedCategories.has(item.category))
+  if (invalid) {
+    throw new AIError('response_format', 'AI 归类返回包含未知笔记或分类，请重试')
   }
+  return parsed
 }
 
 
@@ -339,12 +389,10 @@ ${text}
 [{"title":"动作名称","content":"技术要点说明","category":"分类名","tags":["细分标签1","细分标签2"]}]`
 
   const data = await callAPI(config, { max_tokens: 1500, messages: [{ role: 'user', content: prompt }] })
-  try {
-    const cleaned = data.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
-    return normalizeGeneratedTechniques(JSON.parse(cleaned) as GeneratedTechnique[], categories)
-  } catch {
-    throw new Error('AI 返回格式异常，请重试')
-  }
+  return normalizeGeneratedTechniques(
+    parseAIJson(data, generatedTechniquesSchema, 'AI 经验解析返回'),
+    categories,
+  )
 }
 
 
@@ -517,45 +565,74 @@ export async function streamChatMessage(
     ],
   }
 
-  const res = await doFetch(config, opts)
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    const msg = (err as { error?: { message?: string } }).error?.message
-    throw new Error(msg ?? `API 错误 ${res.status}`)
-  }
-
-  const reader = res.body?.getReader()
-  if (!reader) throw new Error('不支持流式输出')
-
-  const decoder = new TextDecoder()
-  let buffer = ''
-  const anthropic = isAnthropicFormat(config)
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() ?? ''
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue
-      const data = line.slice(6).trim()
-      if (data === '[DONE]') return
-      try {
-        const json = JSON.parse(data) as Record<string, unknown>
-        let text = ''
-        if (anthropic) {
-          if (json.type === 'content_block_delta') {
-            const delta = json.delta as Record<string, unknown>
-            if (delta?.type === 'text_delta') text = (delta.text as string) ?? ''
-          }
-        } else {
-          const choices = json.choices as Array<{ delta: { content?: string } }>
-          text = choices?.[0]?.delta?.content ?? ''
-        }
-        if (text) onChunk(text)
-      } catch { /* ignore parse errors */ }
+  const request = await doFetch(config, opts)
+  try {
+    if (!request.response.ok) {
+      const data: unknown = await request.response.json().catch(() => undefined)
+      throw new AIError(
+        'http',
+        extractAPIErrorMessage(data) ?? `API 错误 ${request.response.status}`,
+        { status: request.response.status },
+      )
     }
+
+    const reader = request.response.body?.getReader()
+    if (!reader) throw new AIError('response_format', '当前 API 不支持流式输出')
+
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let receivedText = false
+    const anthropic = isAnthropicFormat(config)
+
+    const processLine = (line: string): boolean => {
+      const normalized = line.trim()
+      if (!normalized.startsWith('data:')) return false
+      const data = normalized.slice(5).trim()
+      if (!data) return false
+      if (data === '[DONE]') {
+        if (!receivedText) throw new AIError('empty_response', 'AI 没有返回内容，请重试')
+        return true
+      }
+
+      let json: unknown
+      try {
+        json = JSON.parse(data)
+      } catch (error) {
+        throw new AIError('response_format', 'AI 流式返回包含无效 JSON', { cause: error })
+      }
+      const text = extractStreamText(json, anthropic)
+      if (text) {
+        receivedText = true
+        onChunk(text)
+      }
+      return false
+    }
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split(/\r?\n/)
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
+        if (processLine(line)) return
+      }
+    }
+
+    buffer += decoder.decode()
+    if (buffer && processLine(buffer)) return
+    if (!receivedText) throw new AIError('empty_response', 'AI 没有返回内容，请重试')
+  } catch (error) {
+    if (isAIError(error)) throw error
+    if (request.didTimeout()) {
+      throw new AIError('timeout', 'AI 请求超时，请稍后重试', { cause: error })
+    }
+    if (signal?.aborted || (error as Error).name === 'AbortError') {
+      throw new AIError('cancelled', 'AI 请求已取消', { cause: error })
+    }
+    throw new AIError('network', 'AI 流式连接中断，请重试', { cause: error })
+  } finally {
+    request.cleanup()
   }
 }
 
