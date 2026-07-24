@@ -118,12 +118,12 @@ Lint 中既有结构性规则，也有真实缺陷信号，例如聊天回调缺
 
 建议：统一 `AIClient`，对输入、输出、超时、取消、重试和错误类型做一层封装；公开部署前改为服务端代理和用户级密钥管理。
 
-#### P2-02 `[进行中]` 模块膨胀与遗留代码
+#### P2-02 `[部分完成]` 模块膨胀与遗留代码
 
-- `SettingsPage`、`TechniquePage`、`ai.ts` 已承担多个职责。
-- `HomePage.tsx`、`src/lib/chat.ts`、`src/lib/claude.ts` 以及模板图片未被引用。
-- 训练提示 UI/判断逻辑同时存在于未使用的 HomePage 和实际 ListPage 中，容易双份维护。
-- `.skill-staging/` 为 1.2MB 未跟踪目录，应明确加入忽略或移出仓库。
+- 已删除无引用的 `HomePage.tsx`、`src/lib/chat.ts`、`src/lib/claude.ts` 和模板 SVG。
+- 已拆分 `ai.ts` 的 Schema / 错误边界，并将 `SettingsPage` 从 1,003 行降至 462 行。
+- 设置页的 AI、备份、网球等级、本地文件和数据概览已成为独立区块。
+- `TechniquePage` 和 localStorage 订阅仍需继续收敛；未引用二进制 `hero.png` 暂时保留。
 
 建议：按领域拆分 `records / sports / techniques / conversations / backup / ai`；页面只做编排；删除确认无引用的旧实现；建立 `docs/decisions` 记录关键数据决策。
 
@@ -285,7 +285,7 @@ focus?: {
 4. 页面拆分后对设置、顾问、技巧、日历做路由懒加载。
 5. 将 localStorage 订阅迁移到 `useSyncExternalStore`，随后重新开启 `react-hooks/set-state-in-effect`。
 
-验收进展：已删除未引用的旧首页、旧聊天、旧 Claude 实现和模板 SVG；未知链接与渲染异常均有恢复界面；除首页外的 6 个页面均按需加载。首屏主 JS 从 446.13KB（gzip 131.06KB）降到 202.27KB（gzip 63.71KB）。`SettingsPage`、`TechniquePage` 内部拆分和 `useSyncExternalStore` 仍待处理；未引用的二进制 `hero.png` 暂时保留。
+验收进展：已删除未引用的旧首页、旧聊天、旧 Claude 实现和模板 SVG；未知链接与渲染异常均有恢复界面；除首页外的 6 个页面均按需加载。首屏主 JS 从 446.13KB（gzip 131.06KB）降到 202.35KB（gzip 63.73KB）。`SettingsPage` 已按 AI、备份、网球等级、本地文件和数据概览拆分，主组件从 1,003 行降至 462 行。`TechniquePage` 内部拆分和 `useSyncExternalStore` 仍待处理；未引用的二进制 `hero.png` 暂时保留。
 
 #### P2：`[接口防护已完成]` 补关键流程测试与本地接口防护（1 天）
 
@@ -322,3 +322,6 @@ focus?: {
 | 2026-07-23 | 下沉共享实体 Schema，为本地文件接口增加 5MB 上限与读写校验 | 非法字段和超大请求在备份/写盘前拒绝；浏览器也会拒绝损坏响应 |
 | 2026-07-23 | 对现有 `app-data.json` 做只读兼容检查 | 发现并保留历史孤儿运动引用，避免整库不可读；GET 200、无效 POST 400，文件哈希未变化 |
 | 2026-07-23 | 执行本地文件 Schema、大小上限与损坏响应测试 | 9 个测试文件共 34 项测试通过 |
+| 2026-07-24 | 拆分设置页 AI、网球等级、本地文件、数据概览和备份职责 | `SettingsPage` 从 1,003 行降至 462 行，页面只保留运动管理与区块编排 |
+| 2026-07-24 | 执行 `npm run check` | Lint、9 个测试文件共 34 项测试、生产构建全部通过 |
+| 2026-07-24 | 浏览器回归设置页分区、AI 配置展开 / 取消和备份选项展开 | 交互正常，控制台无警告或错误 |
