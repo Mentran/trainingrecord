@@ -2,6 +2,7 @@ import type { Conversation } from './ai'
 import { localFileReadResponseSchema, localFileWriteResponseSchema } from './localFileSchema'
 import type { LocalFileData } from './localFileSchema'
 import { STORAGE_KEYS } from './storageKeys'
+import { emitStorageChange } from './storageEvents'
 import type { Sport, TechniqueNote, TrainingRecord } from '../types'
 
 export type { LocalFileData } from './localFileSchema'
@@ -121,6 +122,7 @@ function applyFileData(data: LocalFileData): void {
   } finally {
     hydrating = false
   }
+  emitStorageChange()
 }
 
 async function writeLocalFileNow(): Promise<void> {

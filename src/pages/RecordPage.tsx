@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { saveRecord, updateRecord, getRecords, getCoaches } from '../lib/storage'
+import { saveRecord, updateRecord } from '../lib/storage'
 import { polishText, hasApiKey } from '../lib/ai'
 import PageHeader from '../components/PageHeader'
 import { useSport } from '../contexts/SportContext'
 import type { TrainingFocus, TrainingFocusOutcome } from '../types'
 import { FOCUS_OUTCOME_LABELS } from '../lib/trainingFocus'
+import { useCoaches, useRecords } from '../hooks/useLocalData'
 
 function today(): string {
   return new Date().toISOString().slice(0, 10)
@@ -24,6 +25,11 @@ interface FormState {
 }
 
 export default function RecordPage() {
+  const [searchParams] = useSearchParams()
+  return <RecordPageForm key={searchParams.toString() || 'new'} />
+}
+
+function RecordPageForm() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { sport, sports } = useSport()
@@ -33,55 +39,40 @@ export default function RecordPage() {
   const focusCardIdParam = searchParams.get('focusCardId')
   const tagParam = searchParams.get('tag')
 
-  const editingRecord = editId ? getRecords().find(record => record.id === editId) : undefined
+  const records = useRecords()
+  const editingRecord = editId ? records.find(record => record.id === editId) : undefined
   const formSport = editingRecord
     ? (sports.find(item => item.id === editingRecord.sportId) ?? sport)
     : sport
   const PRESET_TAGS = formSport.categories ?? []
+  const coaches = useCoaches(editingRecord?.sportId ?? sport.id)
 
-  const [form, setForm] = useState<FormState>({
+  const [form, setForm] = useState<FormState>(() => editingRecord ? {
+    date: editingRecord.date,
+    duration: editingRecord.duration ? String(editingRecord.duration) : '',
+    coach: editingRecord.coach,
+    content: editingRecord.content,
+    reflection: editingRecord.reflection,
+    tags: editingRecord.tags ?? [],
+  } : {
     date: dateParam ?? today(),
     duration: '',
     coach: '',
     content: '',
     reflection: '',
-    tags: tagParam && !editId ? [tagParam] : [],
+    tags: tagParam ? [tagParam] : [],
   })
-  const [coaches, setCoaches] = useState<string[]>([])
   const [errors, setErrors] = useState<Partial<FormState>>({})
-  const [customDuration, setCustomDuration] = useState(false)
+  const [customDuration, setCustomDuration] = useState(
+    Boolean(editingRecord?.duration && !DURATION_PRESETS.includes(editingRecord.duration)),
+  )
   const [tagInput, setTagInput] = useState('')
   const [polishing, setPolishing] = useState(false)
   const [focus, setFocus] = useState<TrainingFocus | undefined>(() => (
-    focusParam?.trim()
+    editingRecord?.focus ?? (focusParam?.trim()
       ? { text: focusParam.trim(), cardId: focusCardIdParam?.trim() || undefined }
-      : undefined
+      : undefined)
   ))
-
-  useEffect(() => {
-    setCoaches(getCoaches(editingRecord?.sportId ?? sport.id))
-    if (editId) {
-      const record = getRecords().find(r => r.id === editId)
-      if (record) {
-        setForm({
-          date: record.date,
-          duration: record.duration ? String(record.duration) : '',
-          coach: record.coach,
-          content: record.content,
-          reflection: record.reflection,
-          tags: record.tags ?? [],
-        })
-        setFocus(record.focus)
-        if (record.duration && !DURATION_PRESETS.includes(record.duration)) {
-          setCustomDuration(true)
-        }
-      }
-    } else {
-      setFocus(focusParam?.trim()
-        ? { text: focusParam.trim(), cardId: focusCardIdParam?.trim() || undefined }
-        : undefined)
-    }
-  }, [editId, editingRecord?.sportId, focusCardIdParam, focusParam, sport.id])
 
   function set(field: keyof Omit<FormState, 'tags'>, value: string) {
     setForm(prev => ({ ...prev, [field]: value }))

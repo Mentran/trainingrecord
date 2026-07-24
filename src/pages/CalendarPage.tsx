@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react'
-import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
-import { getRecords, getCoaches } from '../lib/storage'
+import { useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import type { TrainingRecord } from '../types'
 import TrainingCard from '../components/TrainingCard'
 import { getCoachColor } from '../lib/recordPresentation'
 import { useSport } from '../contexts/SportContext'
+import { useCoaches, useRecords } from '../hooks/useLocalData'
 
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
 const COACH_COLORS = ['#E8A838', '#4A90D9', '#E85D5D', '#9B59B6', '#1ABC9C']
@@ -184,7 +184,6 @@ function CoachBreakdown({ data }: { data: { coach: string; count: number; pct: n
 
 export default function CalendarPage() {
   const navigate = useNavigate()
-  const location = useLocation()
   const [searchParams] = useSearchParams()
   const { sport } = useSport()
   const now = new Date()
@@ -194,14 +193,9 @@ export default function CalendarPage() {
   })
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth())
-  const [records, setRecords] = useState<TrainingRecord[]>([])
-  const [coaches, setCoaches] = useState<string[]>([])
+  const records = useRecords(sport.id)
+  const coaches = useCoaches(sport.id)
   const [selected, setSelected] = useState<string | null>(null)
-
-  useEffect(() => {
-    setRecords(getRecords(sport.id))
-    setCoaches(getCoaches(sport.id))
-  }, [location.key, sport.id])
 
   const heatColors = buildHeatColors(sport.accentColor)
   function heatColor(minutes: number): string {

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { exportAll, saveSport, updateSport, deleteSport, DEFAULT_SPORT, SPORT_CATEGORY_PRESETS } from '../lib/storage'
-import { getAIConfig, setAIConfig, hasApiKey, generateSportCategories, categorizeTechniques, getConversations, type AIConfig } from '../lib/ai'
-import { getRecords, getTechniques, updateTechnique } from '../lib/storage'
+import { getAIConfig, setAIConfig, hasApiKey, generateSportCategories, categorizeTechniques, type AIConfig } from '../lib/ai'
+import { getTechniques, updateTechnique } from '../lib/storage'
 import { getLocalFileStoreStatus, saveCurrentDataToLocalFile } from '../lib/localFileStore'
 import { useToast } from '../contexts/ToastContext'
 import { useSport } from '../contexts/SportContext'
@@ -11,6 +11,8 @@ import BackupSection from '../components/settings/BackupSection'
 import TennisLevelSection from '../components/settings/TennisLevelSection'
 import { DataOverviewSection, LocalFileSection } from '../components/settings/DataStorageSections'
 import type { Sport, TennisLevel } from '../types'
+import { useRecords, useTechniques } from '../hooks/useLocalData'
+import { useConversations } from '../hooks/useConversations'
 
 const PRESET_COLORS: { color: string; accent: string; label: string }[] = [
   { color: '#1A2E1A', accent: '#9DC41A', label: '网球绿' },
@@ -55,7 +57,10 @@ function estimateTextSize(text: string): string {
 
 export default function SettingsPage() {
   const { showToast } = useToast()
-  const { sports, switchSport, refreshSports, sport: activeSport } = useSport()
+  const { sports, switchSport, sport: activeSport } = useSport()
+  const allRecords = useRecords()
+  const allTechniques = useTechniques()
+  const allConversations = useConversations()
   const [aiConfig, setAiConfigState] = useState<AIConfig>(getAIConfig)
   const [showAddSport, setShowAddSport] = useState(false)
   const [addForm, setAddForm] = useState<AddSportForm>({ name: '', icon: '🏃', colorIndex: 1 })
@@ -100,7 +105,6 @@ export default function SettingsPage() {
     const preset = PRESET_COLORS[addForm.colorIndex]
     const categories = SPORT_CATEGORY_PRESETS[addForm.name.trim()] ?? []
     saveSport({ name: addForm.name.trim(), icon: addForm.icon, color: preset.color, accentColor: preset.accent, categories })
-    refreshSports()
     setShowAddSport(false)
     setAddForm({ name: '', icon: '🏃', colorIndex: 1 })
     showToast('运动项目已添加')
@@ -108,15 +112,12 @@ export default function SettingsPage() {
 
   function handleDeleteSport(sport: Sport) {
     deleteSport(sport.id)
-    if (activeSport.id === sport.id) switchSport(DEFAULT_SPORT.id)
-    else refreshSports()
     setDeleteTarget(null)
     showToast('已删除')
   }
 
   function handleSetTennisLevel(level: TennisLevel) {
     updateSport(DEFAULT_SPORT.id, { level })
-    refreshSports()
     showToast('网球等级已更新')
   }
 
@@ -128,7 +129,6 @@ export default function SettingsPage() {
 
   function saveCategories(sportId: string) {
     updateSport(sportId, { categories: categoryDraft })
-    refreshSports()
     setEditingCategoriesSportId(null)
     showToast('分类已保存')
   }
@@ -164,9 +164,6 @@ export default function SettingsPage() {
     }
   }
 
-  const allRecords = getRecords()
-  const allTechniques = getTechniques()
-  const allConversations = getConversations()
   const storageSize = estimateTextSize(exportAll())
   const backupDays = backupMeta ? Math.floor((renderedAt - new Date(backupMeta.exportedAt).getTime()) / 86400000) : null
   const recordsSinceBackup = backupMeta ? Math.max(0, allRecords.length - backupMeta.recordsCount) : allRecords.length
@@ -430,7 +427,6 @@ export default function SettingsPage() {
           color={activeSport.color}
           reminder={shouldRemindBackup ? backupReminder : undefined}
           onBackupCreated={handleBackupCreated}
-          onDataChanged={refreshSports}
         />
       </div>
 

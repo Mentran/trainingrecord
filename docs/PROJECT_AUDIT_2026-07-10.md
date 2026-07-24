@@ -118,12 +118,13 @@ Lint 中既有结构性规则，也有真实缺陷信号，例如聊天回调缺
 
 建议：统一 `AIClient`，对输入、输出、超时、取消、重试和错误类型做一层封装；公开部署前改为服务端代理和用户级密钥管理。
 
-#### P2-02 `[大部分完成]` 模块膨胀与遗留代码
+#### P2-02 `[主要目标已完成]` 模块膨胀与遗留代码
 
 - 已删除无引用的 `HomePage.tsx`、`src/lib/chat.ts`、`src/lib/claude.ts` 和模板 SVG。
 - 已拆分 `ai.ts` 的 Schema / 错误边界，并将 `SettingsPage` 从 1,003 行降至 462 行。
 - 设置页的 AI、备份、网球等级、本地文件和数据概览已成为独立区块；`TechniquePage` 从 655 行降至 273 行。
-- localStorage 订阅仍需继续收敛；未引用二进制 `hero.png` 暂时保留。
+- localStorage 已统一接入 `useSyncExternalStore`；列表、日历、技巧、详情、设置、聊天历史和运动上下文不再依赖路由刷新或 `refreshSports()`。
+- 未引用二进制 `hero.png` 暂时保留。
 
 建议：按领域拆分 `records / sports / techniques / conversations / backup / ai`；页面只做编排；删除确认无引用的旧实现；建立 `docs/decisions` 记录关键数据决策。
 
@@ -277,7 +278,7 @@ focus?: {
 
 验收结果：润色、技巧生成、运动分类、技巧归类和经验解析均使用 Zod 校验；错误分为配置、取消、超时、网络、HTTP、格式和空响应；非流式默认 45 秒、流式默认 120 秒超时；切换运动沿用 `AbortError` 取消语义。模拟测试覆盖 Anthropic、OpenAI、代码围栏、坏字段、HTTP 错误、损坏 SSE、尾缓冲、取消与超时。
 
-#### P2：`[进行中]` 降低维护成本（1–2 天）
+#### P2：`[主要目标已完成]` 降低维护成本（1–2 天）
 
 1. 拆分 `SettingsPage`（1,003 行）、`TechniquePage`（655 行）和 `ai.ts`（583 行），页面只负责编排。
 2. 确认后删除未引用的 `HomePage.tsx`、`lib/chat.ts`、`lib/claude.ts` 和模板资源，避免双份逻辑。
@@ -285,7 +286,7 @@ focus?: {
 4. 页面拆分后对设置、顾问、技巧、日历做路由懒加载。
 5. 将 localStorage 订阅迁移到 `useSyncExternalStore`，随后重新开启 `react-hooks/set-state-in-effect`。
 
-验收进展：已删除未引用的旧首页、旧聊天、旧 Claude 实现和模板 SVG；未知链接与渲染异常均有恢复界面；除首页外的 6 个页面均按需加载。首屏主 JS 从 446.13KB（gzip 131.06KB）降到 202.35KB（gzip 63.73KB）。`SettingsPage` 已按 AI、备份、网球等级、本地文件和数据概览拆分，主组件从 1,003 行降至 462 行；`TechniquePage` 已按总结库、AI 草稿和通用编辑弹层拆分，主组件从 655 行降至 273 行。`useSyncExternalStore` 仍待处理；未引用的二进制 `hero.png` 暂时保留。
+验收进展：已删除未引用的旧首页、旧聊天、旧 Claude 实现和模板 SVG；未知链接与渲染异常均有恢复界面；除首页外的 6 个页面均按需加载。首屏主 JS 保持约 202KB（gzip 64KB）。`SettingsPage` 已按 AI、备份、网球等级、本地文件和数据概览拆分，主组件从 1,003 行降至 462 行；`TechniquePage` 已按总结库、AI 草稿和通用编辑弹层拆分，主组件从 655 行降至 273 行。记录、技巧、运动、教练和会话已接入 `useSyncExternalStore`，同页写入与跨标签页更新均可触发界面刷新；`react-hooks/set-state-in-effect` 已重新启用为 error。未引用的二进制 `hero.png` 暂时保留。
 
 #### P2：`[接口防护已完成]` 补关键流程测试与本地接口防护（1 天）
 
@@ -327,3 +328,7 @@ focus?: {
 | 2026-07-24 | 浏览器回归设置页分区、AI 配置展开 / 取消和备份选项展开 | 交互正常，控制台无警告或错误 |
 | 2026-07-24 | 拆分技巧总结库、AI 草稿区和通用编辑弹层 | `TechniquePage` 从 655 行降至 273 行，两套重复编辑表单合并为一套 |
 | 2026-07-24 | 执行 `npm run check` 并浏览器回归技巧页 | 34 项测试、Lint、生产构建通过；新建、筛选、搜索、排序和经验导入面板正常，控制台无错误 |
+| 2026-07-24 | 增加统一存储变更信号及 `useSyncExternalStore` 数据 Hook | 同页写入和其他标签页 `storage` 事件均能刷新订阅组件，原 localStorage 键及 JSON 格式未变 |
+| 2026-07-24 | 迁移列表、日历、技巧、详情、设置、聊天历史和运动上下文 | 删除 `location.key` 刷新、页面 `reload()` 和 `refreshSports()` 手动同步 |
+| 2026-07-24 | 重启副作用规范并执行 `npm run check` | `react-hooks/set-state-in-effect` 设为 error；10 个测试文件共 36 项测试、Lint、构建全部通过 |
+| 2026-07-24 | 浏览器回归数据订阅关键路径 | 技巧同页保存即时出现、网球等级即时更新；日历与聊天正常，控制台无错误 |

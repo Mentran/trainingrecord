@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
-import { useLocation } from 'react-router-dom'
-import { deleteTechnique, getTechniques, saveTechnique, updateTechnique } from '../lib/storage'
+import { useState } from 'react'
+import { deleteTechnique, saveTechnique, updateTechnique } from '../lib/storage'
 import { getGeneratedCache, setGeneratedCache, type GeneratedTechnique } from '../lib/ai'
-import type { TechniqueNote } from '../types'
+import type { Sport, TechniqueNote } from '../types'
 import PageHeader from '../components/PageHeader'
 import AIDraftsSection from '../components/techniques/AIDraftsSection'
 import TechniqueEditorModal, { type TechniqueEditState } from '../components/techniques/TechniqueEditorModal'
 import TechniqueLibrarySection from '../components/techniques/TechniqueLibrarySection'
 import { useSport } from '../contexts/SportContext'
+import { useTechniques } from '../hooks/useLocalData'
 
 type Tab = 'user' | 'ai'
 
@@ -24,28 +24,19 @@ const EMPTY_EDIT: TechniqueEditState = {
 }
 
 export default function TechniquePage() {
-  const location = useLocation()
   const { sport } = useSport()
+  return <TechniquePageForSport key={sport.id} sport={sport} />
+}
+
+function TechniquePageForSport({ sport }: { sport: Sport }) {
   const [tab, setTab] = useState<Tab>('user')
-  const [notes, setNotes] = useState<TechniqueNote[]>([])
+  const notes = useTechniques(sport.id)
   const [generated, setGenerated] = useState<GeneratedTechnique[]>(() => getGeneratedCache(sport.id)?.items ?? [])
   const [collectingIndex, setCollectingIndex] = useState<number | null>(null)
   const [edit, setEdit] = useState<TechniqueEditState | null>(null)
   const [draftEdit, setDraftEdit] = useState<DraftEditState | null>(null)
   const categories = sport.categories ?? []
   const headerBackground = `linear-gradient(135deg, ${sport.color} 0%, ${sport.color}cc 100%)`
-
-  const reload = useCallback(() => {
-    setNotes(getTechniques(sport.id))
-  }, [sport.id])
-
-  useEffect(() => {
-    reload()
-  }, [location.key, reload])
-
-  useEffect(() => {
-    setGenerated(getGeneratedCache(sport.id)?.items ?? [])
-  }, [sport.id])
 
   function updateGenerated(items: GeneratedTechnique[]) {
     setGenerated(items)
@@ -70,7 +61,6 @@ export default function TechniquePage() {
         return next
       })
       setCollectingIndex(null)
-      reload()
       setTab('user')
     }, 380)
   }
@@ -139,19 +129,16 @@ export default function TechniquePage() {
         votes: 0,
       })
     }
-    reload()
     setEdit(null)
   }
 
   function handleDelete(id: string) {
     if (!confirm('确认删除这条技巧笔记？')) return
     deleteTechnique(id)
-    reload()
   }
 
   function handleVote(id: string, current: number) {
     updateTechnique(id, { votes: current + 1 })
-    reload()
   }
 
   return (

@@ -1,6 +1,7 @@
 import type { Conversation } from './ai'
 import { parseBackupJson } from './backupSchema'
 import { scheduleLocalFileSync } from './localFileStore'
+import { emitStorageChange } from './storageEvents'
 import { STORAGE_KEYS } from './storageKeys'
 import type { TrainingRecord, Sport, TechniqueNote } from '../types'
 
@@ -47,11 +48,13 @@ function generateId(): string {
 function setLocalItem(key: string, value: string): void {
   localStorage.setItem(key, value)
   scheduleLocalFileSync()
+  emitStorageChange()
 }
 
 function removeLocalItem(key: string): void {
   localStorage.removeItem(key)
   scheduleLocalFileSync()
+  emitStorageChange()
 }
 
 // ── Sports ──────────────────────────────────────────────
@@ -317,6 +320,7 @@ export function importBackup(
     throw new Error(`导入失败，原数据已恢复：${(error as Error).message}`, { cause: error })
   }
   scheduleLocalFileSync()
+  emitStorageChange()
 }
 
 export function restoreLastImport(): void {

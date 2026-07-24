@@ -1,29 +1,19 @@
-import { useState, useCallback } from 'react'
-import type { Sport } from '../types'
-import { getActiveSport, getActiveSportId, setActiveSportId, getSports } from '../lib/storage'
+import { useCallback } from 'react'
+import { DEFAULT_SPORT, setActiveSportId } from '../lib/storage'
+import { useActiveSportId, useSports } from '../hooks/useLocalData'
 import { SportContext } from '../contexts/SportContext'
 
 export function SportProvider({ children }: { children: React.ReactNode }) {
-  const [sport, setSport] = useState<Sport>(getActiveSport)
-  const [sports, setSports] = useState<Sport[]>(getSports)
+  const sports = useSports()
+  const activeSportId = useActiveSportId()
+  const sport = sports.find(item => item.id === activeSportId) ?? sports[0] ?? DEFAULT_SPORT
 
   const switchSport = useCallback((id: string) => {
     setActiveSportId(id)
-    const all = getSports()
-    const next = all.find(s => s.id === id) ?? all[0]
-    setSport(next)
-    setSports(all)
-  }, [])
-
-  const refreshSports = useCallback(() => {
-    const all = getSports()
-    setSports(all)
-    const current = all.find(s => s.id === getActiveSportId()) ?? all[0]
-    setSport(current)
   }, [])
 
   return (
-    <SportContext.Provider value={{ sport, sports, switchSport, refreshSports }}>
+    <SportContext.Provider value={{ sport, sports, switchSport }}>
       {children}
     </SportContext.Provider>
   )

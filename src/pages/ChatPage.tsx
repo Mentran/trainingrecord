@@ -7,6 +7,8 @@ import {
 } from '../lib/ai'
 import { getRecords, getTechniques } from '../lib/storage'
 import { useSport } from '../contexts/SportContext'
+import { useConversations } from '../hooks/useConversations'
+import type { Sport } from '../types'
 
 function generateId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
@@ -91,10 +93,14 @@ const SUGGESTIONS = [
 // ── Main component ───────────────────────────────────────
 
 export default function ChatPage() {
-  const navigate = useNavigate()
   const { sport } = useSport()
+  return <ChatPageForSport key={sport.id} sport={sport} />
+}
 
-  const [conversations, setConversations] = useState<Conversation[]>(() => getConversations(sport.id))
+function ChatPageForSport({ sport }: { sport: Sport }) {
+  const navigate = useNavigate()
+
+  const conversations = useConversations(sport.id)
   const [activeConvId, setActiveConvIdState] = useState<string | null>(() => {
     const id = getActiveConvId(sport.id)
     const convs = getConversations(sport.id)
@@ -130,20 +136,6 @@ export default function ChatPage() {
     el.style.height = 'auto'
     el.style.height = Math.min(el.scrollHeight, 128) + 'px'
   }, [input])
-
-  useEffect(() => {
-    requestControllerRef.current?.abort()
-    const nextConversations = getConversations(sport.id)
-    const storedId = getActiveConvId(sport.id)
-    const nextActive = nextConversations.find(conversation => conversation.id === storedId) ?? nextConversations[0]
-    setConversations(nextConversations)
-    setActiveConvIdState(nextActive?.id ?? null)
-    setMessages(nextActive?.messages ?? [])
-    setFollowUps([])
-    setStreamingText('')
-    streamingRef.current = ''
-    setLoading(false)
-  }, [sport.id])
 
   useEffect(() => {
     return () => {
@@ -186,8 +178,7 @@ export default function ChatPage() {
 
   function handleDeleteConv(id: string) {
     deleteConversation(id)
-    const updated = getConversations(sport.id)
-    setConversations(updated)
+    const updated = conversations.filter(conversation => conversation.id !== id)
     if (id === activeConvId) {
       if (updated.length > 0) switchConversation(updated[0].id)
       else newConversation()
@@ -246,7 +237,6 @@ export default function ChatPage() {
         updatedAt: now,
       }
       saveConversation(conv)
-      setConversations(getConversations(sport.id))
     } catch (e) {
       if ((e as Error).name === 'AbortError') return
       const errMsg: ChatMessage = {

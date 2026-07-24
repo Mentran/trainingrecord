@@ -19,9 +19,7 @@ export default defineConfig([
       globals: globals.browser,
     },
     rules: {
-      // 页面从 localStorage 这个外部数据源恢复状态时需要同步 setState；
-      // 后续迁移到 useSyncExternalStore 后可重新开启该建议规则。
-      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/set-state-in-effect': 'error',
     },
   },
 ])

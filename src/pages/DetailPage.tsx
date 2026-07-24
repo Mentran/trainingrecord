@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { getRecords, deleteRecord, getCoaches, updateRecord } from '../lib/storage'
+import { deleteRecord, updateRecord } from '../lib/storage'
 import { hasApiKey, polishText } from '../lib/ai'
 import { useToast } from '../contexts/ToastContext'
 import { getCoachColor } from '../lib/recordPresentation'
@@ -8,6 +8,7 @@ import { useSport } from '../contexts/SportContext'
 import { getRecommendedTrainingPrompt, getTennisKnowledgeCard, isTennisSport } from '../data/tennisKnowledge'
 import { FOCUS_OUTCOME_LABELS, getUnresolvedFocusStreak, isUnresolvedFocusOutcome } from '../lib/trainingFocus'
 import type { TrainingFocusOutcome } from '../types'
+import { useCoaches, useRecords } from '../hooks/useLocalData'
 
 const FOCUS_OUTCOMES: TrainingFocusOutcome[] = ['improved', 'unchanged', 'worse']
 
@@ -23,8 +24,9 @@ export default function DetailPage() {
   const { showToast } = useToast()
   const { sport } = useSport()
 
-  const coaches = getCoaches()
-  const [record, setRecord] = useState(() => getRecords().find(r => r.id === id))
+  const records = useRecords()
+  const coaches = useCoaches()
+  const record = records.find(item => item.id === id)
   const [polishing, setPolishing] = useState(false)
   const [preview, setPreview] = useState<{ content: string; reflection: string } | null>(null)
 
@@ -40,7 +42,10 @@ export default function DetailPage() {
   const coachColor = getCoachColor(record.coach, coaches)
   const apiConfigured = hasApiKey()
   const justSaved = searchParams.get('saved') === '1'
-  const focusStreak = getUnresolvedFocusStreak(getRecords(record.sportId), record)
+  const focusStreak = getUnresolvedFocusStreak(
+    records.filter(item => item.sportId === record.sportId),
+    record,
+  )
   const relatedPrompt = justSaved && isTennisSport(sport)
     ? getRecommendedTrainingPrompt(sport.level ?? '2.0', [record], record.focus ? 1 : 0)
     : null
@@ -70,22 +75,20 @@ export default function DetailPage() {
 
   function applyPolish() {
     if (!preview) return
-    const updated = updateRecord(record!.id, {
+    updateRecord(record!.id, {
       content: preview.content,
       reflection: preview.reflection,
       polishStatus: 'applied',
     })
-    if (updated) setRecord(updated)
     setPreview(null)
     showToast('已应用润色')
   }
 
   function handleFocusOutcome(outcome: TrainingFocusOutcome) {
     if (!record!.focus) return
-    const updated = updateRecord(record!.id, {
+    updateRecord(record!.id, {
       focus: { ...record!.focus, outcome },
     })
-    if (updated) setRecord(updated)
     showToast(`已记录：${FOCUS_OUTCOME_LABELS[outcome]}`)
   }
 

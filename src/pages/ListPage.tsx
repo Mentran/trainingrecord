@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
-import { getRecords, getCoaches, getTechniques, saveTechnique } from '../lib/storage'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { saveTechnique } from '../lib/storage'
 import { getRecommendedTrainingPrompt, isTennisSport, type TennisKnowledgeCard } from '../data/tennisKnowledge'
 import { useToast } from '../contexts/ToastContext'
 import type { TrainingRecord } from '../types'
 import TrainingCard from '../components/TrainingCard'
 import { getCoachColor } from '../lib/recordPresentation'
 import { useSport } from '../contexts/SportContext'
+import { useCoaches, useRecords, useTechniques } from '../hooks/useLocalData'
 
 const TRAINING_PROMPT_EXPANDED_KEY = 'tennis-training-prompt-expanded'
 
@@ -61,20 +62,15 @@ function PromptVisual({ type, color }: { type: TennisKnowledgeCard['visualType']
 
 export default function ListPage() {
   const navigate = useNavigate()
-  const location = useLocation()
   const { sport, sports, switchSport } = useSport()
   const { showToast } = useToast()
-  const [records, setRecords] = useState<TrainingRecord[]>([])
-  const [coaches, setCoaches] = useState<string[]>([])
+  const records = useRecords(sport.id)
+  const coaches = useCoaches(sport.id)
+  const techniques = useTechniques(sport.id)
   const [filter, setFilter] = useState('')
   const [tagFilter, setTagFilter] = useState('')
   const [promptOffset, setPromptOffset] = useState(0)
   const [promptExpanded, setPromptExpanded] = useState(getInitialPromptExpanded)
-
-  useEffect(() => {
-    setRecords(getRecords(sport.id))
-    setCoaches(getCoaches(sport.id))
-  }, [location.key, sport.id])
 
   const totalSessions = records.length
   const totalHours = Math.round(records.reduce((s, r) => s + (r.duration ?? 0), 0) / 60 * 10) / 10
@@ -94,7 +90,7 @@ export default function ListPage() {
     .filter(r => !tagFilter || (r.tags ?? []).includes(tagFilter))
 
   function handleCollectPrompt(card: TennisKnowledgeCard) {
-    const exists = getTechniques(sport.id).some(note => note.title === card.title && note.category === card.category)
+    const exists = techniques.some(note => note.title === card.title && note.category === card.category)
     if (exists) {
       showToast('这条提示已经在技巧笔记里')
       return

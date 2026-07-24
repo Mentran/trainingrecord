@@ -36,7 +36,6 @@ interface BackupSectionProps {
   color: string
   reminder?: string
   onBackupCreated: (meta: BackupMeta) => void
-  onDataChanged: () => void
 }
 
 const EXPORT_ITEMS: Array<{ key: keyof ExportOptions; label: string }> = [
@@ -58,7 +57,6 @@ export default function BackupSection({
   color,
   reminder,
   onBackupCreated,
-  onDataChanged,
 }: BackupSectionProps) {
   const { showToast } = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
@@ -150,7 +148,6 @@ export default function BackupSection({
       importBackup(pendingImport.json, pendingImport.options, pendingImport.mode)
       setPendingImport(null)
       setCanRestoreImport(true)
-      onDataChanged()
       showToast(`导入成功（${action}），可在设置中撤销`)
     } catch (error) {
       showToast((error as Error).message ?? '导入失败，原数据未改变', 'error')
@@ -162,7 +159,6 @@ export default function BackupSection({
     try {
       restoreLastImport()
       setCanRestoreImport(true)
-      onDataChanged()
       showToast('已恢复到上次导入前的数据')
     } catch (error) {
       showToast((error as Error).message ?? '恢复失败', 'error')

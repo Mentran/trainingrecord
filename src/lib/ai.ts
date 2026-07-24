@@ -1,5 +1,6 @@
 import type { TrainingRecord, TechniqueNote } from '../types'
 import { scheduleLocalFileSync } from './localFileStore'
+import { emitStorageChange } from './storageEvents'
 import { STORAGE_KEYS } from './storageKeys'
 import { AIError, isAIError } from './aiErrors'
 import {
@@ -419,9 +420,10 @@ const CONVERSATIONS_KEY = STORAGE_KEYS.conversations
 const ACTIVE_CONV_KEY = STORAGE_KEYS.activeConversation
 const LEGACY_CHAT_KEY = 'sport_chat_history'
 
-function setSyncedLocalItem(key: string, value: string): void {
+function setSyncedLocalItem(key: string, value: string, notify = true): void {
   localStorage.setItem(key, value)
   scheduleLocalFileSync()
+  if (notify) emitStorageChange()
 }
 
 export function getConversations(sportId?: string): Conversation[] {
@@ -435,7 +437,7 @@ export function getConversations(sportId?: string): Conversation[] {
           : { ...conversation, sportId: 'tennis' }
       ))
       if (migrated.some((conversation, index) => !('sportId' in stored[index]) || conversation !== stored[index])) {
-        setSyncedLocalItem(CONVERSATIONS_KEY, JSON.stringify(migrated))
+        setSyncedLocalItem(CONVERSATIONS_KEY, JSON.stringify(migrated), false)
       }
       return sportId ? migrated.filter(conversation => conversation.sportId === sportId) : migrated
     }
@@ -454,7 +456,7 @@ export function getConversations(sportId?: string): Conversation[] {
           createdAt: msgs[0].createdAt,
           updatedAt: msgs[msgs.length - 1].createdAt,
         }
-        setSyncedLocalItem(CONVERSATIONS_KEY, JSON.stringify([conv]))
+        setSyncedLocalItem(CONVERSATIONS_KEY, JSON.stringify([conv]), false)
         localStorage.removeItem(LEGACY_CHAT_KEY)
         return !sportId || sportId === 'tennis' ? [conv] : []
       }
@@ -486,7 +488,7 @@ export function getActiveConvId(sportId = 'tennis'): string | null {
   if (sportId !== 'tennis') return null
   const legacy = localStorage.getItem(ACTIVE_CONV_KEY)
   if (legacy) {
-    setSyncedLocalItem(activeConversationKey(sportId), legacy)
+    setSyncedLocalItem(activeConversationKey(sportId), legacy, false)
     localStorage.removeItem(ACTIVE_CONV_KEY)
   }
   return legacy
@@ -499,6 +501,7 @@ export function setActiveConvId(id: string, sportId = 'tennis'): void {
 export function clearActiveConvId(sportId = 'tennis'): void {
   localStorage.removeItem(activeConversationKey(sportId))
   scheduleLocalFileSync()
+  emitStorageChange()
 }
 
 // ── System prompt ────────────────────────────────────────
