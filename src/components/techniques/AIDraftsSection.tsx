@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { generateTechniques, hasApiKey, parseExperienceText, type GeneratedTechnique } from '../../lib/ai'
-import { getRecords } from '../../lib/storage'
+import { getRecords, getTechniques } from '../../lib/storage'
 import type { Sport } from '../../types'
 
 interface AIDraftsSectionProps {
@@ -30,7 +30,13 @@ export default function AIDraftsSection({
   async function handleGenerate() {
     setGenerating(true)
     try {
-      const result = await generateTechniques(getRecords(sport.id), sport.name, categories)
+      const result = await generateTechniques(
+        getRecords(sport.id),
+        sport.name,
+        categories,
+        getTechniques(sport.id),
+      )
+      if (result.length === 0) throw new Error('没有发现新的技巧，现有总结已经覆盖近期记录')
       onItemsChange(mergeDrafts(result, items))
     } catch (error) {
       alert((error as Error).message ?? '生成失败，请重试')
@@ -43,7 +49,13 @@ export default function AIDraftsSection({
     if (!importText.trim()) return
     setImporting(true)
     try {
-      const result = await parseExperienceText(importText, sport.name, categories)
+      const result = await parseExperienceText(
+        importText,
+        sport.name,
+        categories,
+        getTechniques(sport.id),
+      )
+      if (result.length === 0) throw new Error('没有发现新的技巧，已有总结已经覆盖这段内容')
       onItemsChange(mergeDrafts(result, items))
       setImportText('')
       setShowImport(false)

@@ -1,12 +1,14 @@
 import { useState } from 'react'
-import { deleteTechnique, saveTechnique, updateTechnique } from '../lib/storage'
+import { deleteTechnique, mergeTechniques, saveTechnique, updateTechnique } from '../lib/storage'
 import { getGeneratedCache, setGeneratedCache, type GeneratedTechnique } from '../lib/ai'
+import type { DuplicateTechniqueGroup } from '../lib/techniqueMaintenance'
 import type { Sport, TechniqueNote } from '../types'
 import PageHeader from '../components/PageHeader'
 import AIDraftsSection from '../components/techniques/AIDraftsSection'
 import TechniqueEditorModal, { type TechniqueEditState } from '../components/techniques/TechniqueEditorModal'
 import TechniqueLibrarySection from '../components/techniques/TechniqueLibrarySection'
 import { useSport } from '../contexts/SportContext'
+import { useToast } from '../contexts/ToastContext'
 import { useTechniques } from '../hooks/useLocalData'
 
 type Tab = 'user' | 'ai'
@@ -29,6 +31,7 @@ export default function TechniquePage() {
 }
 
 function TechniquePageForSport({ sport }: { sport: Sport }) {
+  const { showToast } = useToast()
   const [tab, setTab] = useState<Tab>('user')
   const notes = useTechniques(sport.id)
   const [generated, setGenerated] = useState<GeneratedTechnique[]>(() => getGeneratedCache(sport.id)?.items ?? [])
@@ -141,6 +144,19 @@ function TechniquePageForSport({ sport }: { sport: Sport }) {
     updateTechnique(id, { votes: current + 1 })
   }
 
+  function handleMerge(group: DuplicateTechniqueGroup) {
+    const confirmed = confirm(
+      `确认将这 ${group.notes.length} 条技巧合并为“${group.plan.title}”？\n\n正文、标签和点赞会保留到合并后的技巧中。`
+    )
+    if (!confirmed) return
+    const merged = mergeTechniques(group.plan)
+    if (!merged) {
+      showToast('合并失败，技巧数据可能已发生变化')
+      return
+    }
+    showToast(`已合并 ${group.notes.length} 条技巧`)
+  }
+
   return (
     <div className="pb-24">
       <PageHeader title="技巧库" />
@@ -185,6 +201,7 @@ function TechniquePageForSport({ sport }: { sport: Sport }) {
           onEdit={openEdit}
           onDelete={handleDelete}
           onVote={handleVote}
+          onMerge={handleMerge}
         />
       ) : (
         <AIDraftsSection

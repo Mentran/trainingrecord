@@ -3,6 +3,7 @@ import { parseBackupJson } from './backupSchema'
 import { scheduleLocalFileSync } from './localFileStore'
 import { emitStorageChange } from './storageEvents'
 import { STORAGE_KEYS } from './storageKeys'
+import type { TechniqueMergePlan } from './techniqueMaintenance'
 import type { TrainingRecord, Sport, TechniqueNote } from '../types'
 
 const RECORDS_KEY = STORAGE_KEYS.records
@@ -379,4 +380,31 @@ export function deleteTechnique(id: string): boolean {
   if (filtered.length === notes.length) return false
   setLocalItem(TECHNIQUES_KEY, JSON.stringify(filtered))
   return true
+}
+
+export function mergeTechniques(plan: TechniqueMergePlan): TechniqueNote | null {
+  const uniqueIds = [...new Set([plan.keepId, ...plan.removeIds])]
+  if (uniqueIds.length < 2) return null
+  const notes = getTechniques()
+  const selected = notes.filter(note => uniqueIds.includes(note.id))
+  if (selected.length !== uniqueIds.length) return null
+  if (selected.some(note => note.sportId !== selected[0].sportId)) return null
+
+  const keeper = selected.find(note => note.id === plan.keepId)
+  if (!keeper) return null
+  const merged: TechniqueNote = {
+    ...keeper,
+    title: plan.title,
+    content: plan.content,
+    category: plan.category,
+    tags: plan.tags,
+    votes: plan.votes,
+    updatedAt: new Date().toISOString(),
+  }
+  const removeIds = new Set(plan.removeIds)
+  const next = notes
+    .filter(note => !removeIds.has(note.id))
+    .map(note => note.id === merged.id ? merged : note)
+  setLocalItem(TECHNIQUES_KEY, JSON.stringify(next))
+  return merged
 }

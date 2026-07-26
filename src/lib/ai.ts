@@ -255,7 +255,27 @@ export function setGeneratedCache(sportId: string, items: GeneratedTechnique[]):
   localStorage.setItem(GENERATED_CACHE_KEY, JSON.stringify(cache))
 }
 
-function normalizeGeneratedTechniques(items: GeneratedTechnique[], categories: string[]): GeneratedTechnique[] {
+type ExistingTechnique = Pick<TechniqueNote, 'title' | 'category'>
+
+function techniqueTitleKey(title: string): string {
+  return title.trim().toLowerCase().replace(/[\s：:，,。.!！?？、/\\-]+/g, '')
+}
+
+function formatExistingTechniques(items: ExistingTechnique[], categories: string[]): string {
+  if (items.length === 0) return '暂无已有技巧'
+  const counts = categories
+    .map(category => `${category} ${items.filter(item => item.category === category).length} 条`)
+    .join('、')
+  const titles = items.slice(0, 60).map(item => `- [${item.category ?? '未分类'}] ${item.title}`).join('\n')
+  return `分类数量：${counts || '未配置分类'}\n已有标题：\n${titles}`
+}
+
+function normalizeGeneratedTechniques(
+  items: GeneratedTechnique[],
+  categories: string[],
+  existingTechniques: ExistingTechnique[] = [],
+): GeneratedTechnique[] {
+  const seenTitles = new Set(existingTechniques.map(item => techniqueTitleKey(item.title)))
   return items.map(item => {
     const text = `${item.title} ${item.content} ${(item.tags ?? []).join(' ')}`
     const category = categories.find(c => item.category === c)
@@ -276,6 +296,11 @@ function normalizeGeneratedTechniques(items: GeneratedTechnique[], categories: s
       category,
       tags: tags.length > 0 ? tags : ['动作要点'],
     }
+  }).filter(item => {
+    const key = techniqueTitleKey(item.title)
+    if (seenTitles.has(key)) return false
+    seenTitles.add(key)
+    return true
   })
 }
 
@@ -283,6 +308,7 @@ export async function generateTechniques(
   records: TrainingRecord[],
   sportName: string,
   categories: string[] = [],
+  existingTechniques: ExistingTechnique[] = [],
 ): Promise<GeneratedTechnique[]> {
   const config = getAIConfig()
   if (records.length === 0) throw new Error('暂无训练记录，无法生成技巧')
@@ -291,11 +317,14 @@ export async function generateTechniques(
     `[${r.date}] ${r.content}${r.reflection ? `\n感悟：${r.reflection}` : ''}`
   ).join('\n\n')
 
-  const prompt = `你是一位专业的${sportName}教练。请根据以下训练记录，提炼出3-5条具体的技术要点或经验总结。
+  const existingContext = formatExistingTechniques(existingTechniques, categories)
+  const prompt = `你是一位专业的${sportName}教练。请根据以下训练记录，提炼出3-5条新的技术要点或经验总结。
 
 要求：
 - 每条针对一个具体动作或技术环节
-- 内容简洁实用，80字以内
+- 不要生成与已有技巧相同或近义的条目
+- 只能提炼训练记录中确实出现的内容；同样相关时优先补充数量较少的分类
+- content 使用“问题：…；动作：…；练习：…；标准：…”结构，120字以内
 - category 必须从可用技术分类中选 1 个最匹配的分类；不要自创大类
 - tags 生成 1-2 个细分标签，来自训练记录中提到的动作细节、发力方式、节奏或常见问题；不要重复 category
 - tags 每个不超过 6 个字，避免泛词，如"技术"、"训练"、"注意"
@@ -306,6 +335,9 @@ ${categories.length > 0 ? categories.join('、') : '无'}
 训练记录：
 ${recordSummary}
 
+已有技巧（用于去重和补缺，不要改写或复述）：
+${existingContext}
+
 请严格按以下 JSON 数组格式返回，不要有其他内容：
 [{"title":"动作名称","content":"技术要点说明","category":"分类名","tags":["细分标签1","细分标签2"]}]`
 
@@ -313,6 +345,7 @@ ${recordSummary}
   return normalizeGeneratedTechniques(
     parseAIJson(data, generatedTechniquesSchema, 'AI 技巧返回'),
     categories,
+    existingTechniques,
   )
 }
 
@@ -367,14 +400,17 @@ export async function parseExperienceText(
   text: string,
   sportName: string,
   categories: string[] = [],
+  existingTechniques: ExistingTechnique[] = [],
 ): Promise<GeneratedTechnique[]> {
   const config = getAIConfig()
 
+  const existingContext = formatExistingTechniques(existingTechniques, categories)
   const prompt = `你是一位专业的${sportName}教练。用户粘贴了一段训练经验或教练指导文字，请将其整理为若干条独立的技巧条目。
 
 要求：
 - 每条针对一个具体动作或技术环节
-- 内容简洁实用，80字以内
+- 不要生成与已有技巧相同或近义的条目
+- content 使用“问题：…；动作：…；练习：…；标准：…”结构，120字以内
 - category 必须从可用技术分类中选 1 个最匹配的分类；不要自创大类
 - tags 生成 1-2 个细分标签，来自文字中提到的动作细节、发力方式、节奏或常见问题；不要重复 category
 - tags 每个不超过 6 个字，避免泛词，如"技术"、"训练"、"注意"
@@ -386,6 +422,9 @@ ${categories.length > 0 ? categories.join('、') : '无'}
 原文：
 ${text}
 
+已有技巧（用于去重，不要改写或复述）：
+${existingContext}
+
 请严格按以下 JSON 数组格式返回，不要有其他内容：
 [{"title":"动作名称","content":"技术要点说明","category":"分类名","tags":["细分标签1","细分标签2"]}]`
 
@@ -393,6 +432,7 @@ ${text}
   return normalizeGeneratedTechniques(
     parseAIJson(data, generatedTechniquesSchema, 'AI 经验解析返回'),
     categories,
+    existingTechniques,
   )
 }
 

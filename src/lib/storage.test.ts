@@ -7,8 +7,10 @@ import {
   DEFAULT_SPORT,
   deleteSport,
   getRecords,
+  getTechniques,
   hasImportRestorePoint,
   importBackup,
+  mergeTechniques,
   restoreLastImport,
   saveRecord,
   updateRecord,
@@ -123,5 +125,43 @@ describe('storage import and sport isolation', () => {
       note: '多数球可以提前准备',
     })
     expect(getRecords('tennis')[0].focus).toEqual(updated?.focus)
+  })
+
+  it('一次写入完成技巧合并并保留正文、标签和点赞', () => {
+    localStorage.setItem(STORAGE_KEYS.techniques, JSON.stringify([
+      {
+        id: 'keep', sportId: 'tennis', title: '转身带动', content: '用身体带动手臂。',
+        category: '正手', tags: ['转身'], source: 'user', votes: 2, createdAt: now, updatedAt: now,
+      },
+      {
+        id: 'remove', sportId: 'tennis', title: '转身带动挥拍', content: '先转髋，再转肩。',
+        category: '正手', tags: ['动力链'], source: 'ai', votes: 1, createdAt: now, updatedAt: now,
+      },
+      {
+        id: 'other', sportId: 'tennis', title: '抛球', content: '保持稳定。',
+        category: '发球', tags: [], source: 'user', votes: 0, createdAt: now, updatedAt: now,
+      },
+    ]))
+
+    const merged = mergeTechniques({
+      keepId: 'keep',
+      removeIds: ['remove'],
+      title: '转身带动',
+      content: '用身体带动手臂。\n\n补充：先转髋，再转肩。',
+      category: '正手',
+      tags: ['转身', '动力链'],
+      votes: 3,
+    })
+
+    expect(merged).toMatchObject({
+      id: 'keep',
+      title: '转身带动',
+      category: '正手',
+      tags: ['转身', '动力链'],
+      votes: 3,
+    })
+    expect(merged?.content).toContain('用身体带动手臂。')
+    expect(merged?.content).toContain('先转髋，再转肩。')
+    expect(getTechniques().map(item => item.id)).toEqual(['keep', 'other'])
   })
 })

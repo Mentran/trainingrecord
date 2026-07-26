@@ -37,29 +37,6 @@ function getInitialPromptExpanded() {
   }
 }
 
-function PromptVisual({ type, color }: { type: TennisKnowledgeCard['visualType']; color: string }) {
-  const isServe = type === 'serve'
-  const isFootwork = type === 'footwork'
-
-  return (
-    <div className="relative h-24 rounded-xl overflow-hidden bg-[#F5F5F0]">
-      <div className="absolute inset-2 rounded-lg border border-[#DADAD2]" />
-      <div className="absolute left-1/2 top-2 bottom-2 w-px bg-[#DADAD2]" />
-      <div className="absolute left-2 right-2 top-1/2 h-px bg-[#DADAD2]" />
-      <div className="absolute w-6 h-6 rounded-full border-2 bg-white"
-        style={{ borderColor: color, left: isServe ? '22%' : isFootwork ? '28%' : '34%', top: isServe ? '18%' : '52%' }} />
-      <div className="absolute w-3 h-3 rounded-full"
-        style={{ background: color, right: isServe ? '28%' : '22%', top: isServe ? '24%' : '38%' }} />
-      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 260 96" fill="none">
-        <path d={isServe ? 'M70 30 C105 8 150 16 188 30' : isFootwork ? 'M72 68 C102 50 126 50 158 40' : 'M86 64 C120 44 150 36 188 36'}
-          stroke={color} strokeWidth="3" strokeLinecap="round" strokeDasharray={isFootwork ? '5 6' : '0'} />
-        <path d="M178 31l12 4-10 7" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-      <div className="absolute left-3 bottom-2 text-[10px] text-[#9B9B9B]">击球点 / 线路 / 回位</div>
-    </div>
-  )
-}
-
 export default function ListPage() {
   const navigate = useNavigate()
   const { sport, sports, switchSport } = useSport()
@@ -257,17 +234,16 @@ export default function ListPage() {
                         换一条
                       </button>
                     </div>
-                <PromptVisual type={trainingPrompt.visualType} color={sport.accentColor} />
-                <div className="grid gap-2">
-                  <div className="rounded-xl bg-[#FAFAF7] px-3 py-2">
-                    <p className="text-[11px] font-semibold text-[#9B9B9B] mb-0.5">今天练什么</p>
-                    <p className="text-xs text-[#6B7280] leading-relaxed">{trainingPrompt.drill}</p>
-                  </div>
-                  <div className="rounded-xl px-3 py-2" style={{ background: sport.accentColor + '14' }}>
-                    <p className="text-[11px] font-semibold mb-0.5" style={{ color: sport.color }}>记录时关注</p>
-                    <p className="text-xs leading-relaxed" style={{ color: sport.color }}>{trainingPrompt.focus}</p>
-                  </div>
-                </div>
+                    <div className="grid gap-2">
+                      <div className="rounded-xl bg-[#FAFAF7] px-3 py-2">
+                        <p className="text-[11px] font-semibold text-[#9B9B9B] mb-0.5">今天练什么</p>
+                        <p className="text-xs text-[#6B7280] leading-relaxed">{trainingPrompt.drill}</p>
+                      </div>
+                      <div className="rounded-xl px-3 py-2" style={{ background: sport.accentColor + '14' }}>
+                        <p className="text-[11px] font-semibold mb-0.5" style={{ color: sport.color }}>记录时关注</p>
+                        <p className="text-xs leading-relaxed" style={{ color: sport.color }}>{trainingPrompt.focus}</p>
+                      </div>
+                    </div>
                   </div>
                   <div className="flex border-t border-[#E8E8E2]">
                     <button onClick={() => handleCollectPrompt(trainingPrompt)}

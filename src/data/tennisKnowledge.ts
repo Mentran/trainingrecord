@@ -1,7 +1,6 @@
 import type { Sport, TennisLevel, TrainingRecord } from '../types'
 
 export type TennisKnowledgeCategory = '正手' | '反手' | '发球' | '步伐' | '截击' | '战术'
-export type TennisVisualType = 'forehand' | 'backhand' | 'serve' | 'footwork' | 'court'
 
 export interface TennisKnowledgeCard {
   id: string
@@ -12,7 +11,6 @@ export interface TennisKnowledgeCard {
   why: string
   drill: string
   focus: string
-  visualType: TennisVisualType
 }
 
 const LEVEL_RANK: Record<TennisLevel, number> = {
@@ -33,7 +31,6 @@ export const TENNIS_KNOWLEDGE_CARDS: TennisKnowledgeCard[] = [
     why: '握拍太紧会让拍头僵住，转身和送拍都很难做完整。',
     drill: '原地慢挥 20 次，只用 5 分力，感受球拍自然经过身体前方。',
     focus: '今天记录：握拍有没有从始至终保持放松？',
-    visualType: 'forehand',
   },
   {
     id: 'forehand-ready-turn-15',
@@ -44,7 +41,6 @@ export const TENNIS_KNOWLEDGE_CARDS: TennisKnowledgeCard[] = [
     why: '如果正面等球，最后只能用手臂补救，动作会越来越急。',
     drill: '喂球 20 个，每球只检查一件事：球过网前是否已经转身。',
     focus: '今天记录：有没有提前转肩，而不是等球到了才拉拍？',
-    visualType: 'forehand',
   },
   {
     id: 'forehand-contact-front-20',
@@ -55,7 +51,6 @@ export const TENNIS_KNOWLEDGE_CARDS: TennisKnowledgeCard[] = [
     why: '击球点晚会让身体被球挤住，只能用手臂硬推，动作容易变形。',
     drill: '慢速喂球 20 个，只关注提前转身，并在身体前方击球。',
     focus: '今天记录：有没有更早判断落点，给身体留出空间？',
-    visualType: 'forehand',
   },
   {
     id: 'forehand-complete-chain-20',
@@ -66,7 +61,6 @@ export const TENNIS_KNOWLEDGE_CARDS: TennisKnowledgeCard[] = [
     why: '动作链条没稳定时发力，只会放大错误，让球速和失误一起增加。',
     drill: '用 50% 力量连续打 20 个正手，目标是动作完整，不追求速度。',
     focus: '今天记录：哪一环最容易断，转身、引拍、击球还是收拍？',
-    visualType: 'forehand',
   },
   {
     id: 'forehand-rhythm-25',
@@ -77,7 +71,6 @@ export const TENNIS_KNOWLEDGE_CARDS: TennisKnowledgeCard[] = [
     why: '节奏太急会让脚步、引拍、击球点全部乱掉，连续性反而下降。',
     drill: '连续 10 个正手只打 6 分力，每拍都完整收拍后再准备下一球。',
     focus: '今天记录：连续击球时动作有没有越打越急？',
-    visualType: 'forehand',
   },
   {
     id: 'backhand-watch-ball-10',
@@ -88,7 +81,6 @@ export const TENNIS_KNOWLEDGE_CARDS: TennisKnowledgeCard[] = [
     why: '没看清弹跳和击球点，脚步和挥拍都会变成猜。',
     drill: '反手喂球 15 个，每球默念弹跳位置，再开始挥拍。',
     focus: '今天记录：反手时眼睛有没有跟到球弹起来？',
-    visualType: 'backhand',
   },
   {
     id: 'backhand-shoulder-turn-15',
@@ -99,7 +91,6 @@ export const TENNIS_KNOWLEDGE_CARDS: TennisKnowledgeCard[] = [
     why: '肩膀不转，击球时身体会正面硬顶，发力和稳定性都差。',
     drill: '每次来球先转肩停半拍，再完成击球，连续 15 个。',
     focus: '今天记录：反手准备时肩膀有没有真正转过去？',
-    visualType: 'backhand',
   },
   {
     id: 'backhand-stand-stable-20',
@@ -110,7 +101,6 @@ export const TENNIS_KNOWLEDGE_CARDS: TennisKnowledgeCard[] = [
     why: '身体还在漂时，击球点和拍面都会不稳定。',
     drill: '慢速喂球 20 个，要求每球击球前小碎步调整并站稳。',
     focus: '今天记录：反手击球前有没有最后的小碎步调整？',
-    visualType: 'backhand',
   },
   {
     id: 'backhand-forward-25',
@@ -121,7 +111,6 @@ export const TENNIS_KNOWLEDGE_CARDS: TennisKnowledgeCard[] = [
     why: '只横扫会让线路短、球质飘，也更难控制深度。',
     drill: '反手连续 10 球，目标是过网后落在发球线后方。',
     focus: '今天记录：反手有没有向前送拍，而不是只横向甩？',
-    visualType: 'backhand',
   },
   {
     id: 'serve-toss-simple-10',
@@ -132,7 +121,6 @@ export const TENNIS_KNOWLEDGE_CARDS: TennisKnowledgeCard[] = [
     why: '抛球不稳定，后面的蹬腿、挥拍和击球点都无法重复。',
     drill: '不击球，只抛球 20 次，让球落在前脚前方一小步附近。',
     focus: '今天记录：抛球位置是否稳定，还是每次都不一样？',
-    visualType: 'serve',
   },
   {
     id: 'serve-relax-wrist-15',
@@ -143,7 +131,6 @@ export const TENNIS_KNOWLEDGE_CARDS: TennisKnowledgeCard[] = [
     why: '手腕太紧会让动作断掉，也更容易累和受伤。',
     drill: '半速发球 15 个，只关注手臂放松和动作连贯。',
     focus: '今天记录：发球时手腕和前臂有没有紧绷？',
-    visualType: 'serve',
   },
   {
     id: 'serve-complete-motion-20',
@@ -154,7 +141,6 @@ export const TENNIS_KNOWLEDGE_CARDS: TennisKnowledgeCard[] = [
     why: '动作不连贯时加速，只会让击球点更飘，稳定性更差。',
     drill: '每次发球前放慢准备动作，连续发 10 个完整动作球。',
     focus: '今天记录：发球动作是不是一段一段断开的？',
-    visualType: 'serve',
   },
   {
     id: 'serve-target-30',
@@ -165,7 +151,6 @@ export const TENNIS_KNOWLEDGE_CARDS: TennisKnowledgeCard[] = [
     why: '能发向不同区域，下一拍才更容易主动组织。',
     drill: '每边各发 10 个，目标分别放到外角和身体附近。',
     focus: '今天记录：发球有没有明确目标，还是只想发进？',
-    visualType: 'serve',
   },
   {
     id: 'footwork-small-steps-10',
@@ -176,7 +161,6 @@ export const TENNIS_KNOWLEDGE_CARDS: TennisKnowledgeCard[] = [
     why: '大步跑到位后如果不微调，球会离身体太近或太远。',
     drill: '喂球 15 个，每球跑到位后必须再做两三下小碎步。',
     focus: '今天记录：击球前有没有最后的小碎步？',
-    visualType: 'footwork',
   },
   {
     id: 'footwork-recover-15',
@@ -187,7 +171,6 @@ export const TENNIS_KNOWLEDGE_CARDS: TennisKnowledgeCard[] = [
     why: '不回位会让下一球永远被动，动作也更容易慌。',
     drill: '一拍击球后立刻回到中间准备位，连续 10 组。',
     focus: '今天记录：击球后有没有看球发呆，没有回位？',
-    visualType: 'footwork',
   },
   {
     id: 'footwork-find-contact-20',
@@ -198,7 +181,6 @@ export const TENNIS_KNOWLEDGE_CARDS: TennisKnowledgeCard[] = [
     why: '只追球不找点，到了球旁边也打不出完整动作。',
     drill: '喂球 20 个，每球先判断落点，再用小碎步把球放到身体前方。',
     focus: '今天记录：脚步有没有服务于击球点，而不是只追球？',
-    visualType: 'footwork',
   },
   {
     id: 'footwork-split-step-25',
@@ -209,7 +191,6 @@ export const TENNIS_KNOWLEDGE_CARDS: TennisKnowledgeCard[] = [
     why: '站死等球会让第一步变慢，后面只能仓促补救。',
     drill: '对方击球瞬间轻轻垫步，再判断方向启动，连续 10 球。',
     focus: '今天记录：有没有在对方击球时准备启动？',
-    visualType: 'footwork',
   },
   {
     id: 'volley-compact-20',
@@ -220,7 +201,6 @@ export const TENNIS_KNOWLEDGE_CARDS: TennisKnowledgeCard[] = [
     why: '动作太大，来球快时拍面会来不及稳定。',
     drill: '网前截击 15 个，拍子只向前短送，不向后大拉。',
     focus: '今天记录：截击有没有后拉太大？',
-    visualType: 'court',
   },
   {
     id: 'tactics-crosscourt-25',
@@ -231,7 +211,6 @@ export const TENNIS_KNOWLEDGE_CARDS: TennisKnowledgeCard[] = [
     why: '斜线距离更长、过网空间更大，也更容易争取回位时间。',
     drill: '正手斜线连续 10 球，目标不是制胜，而是稳定深度。',
     focus: '今天记录：回合中有没有先选择更安全的线路？',
-    visualType: 'court',
   },
   {
     id: 'tactics-recovery-30',
@@ -242,7 +221,406 @@ export const TENNIS_KNOWLEDGE_CARDS: TennisKnowledgeCard[] = [
     why: '只看当前一拍，容易打出漂亮但让自己失位的球。',
     drill: '每个回合只要求一件事：击球后快速回到能覆盖下一球的位置。',
     focus: '今天记录：你的击球有没有给下一拍留下时间和位置？',
-    visualType: 'court',
+  },
+  {
+    id: 'forehand-racket-ready-10',
+    level: '1.0',
+    category: '正手',
+    title: '准备时先把拍头立起来',
+    fact: '等待来球时让球拍保持在身体前方，比垂在身边更容易及时准备。',
+    why: '拍头过低会多出一次抬拍动作，来球稍快就容易仓促。',
+    drill: '每次击球后回到准备姿势，双手扶拍停一拍，再开始下一球。',
+    focus: '今天记录：等待来球时，球拍有没有回到身体前方？',
+  },
+  {
+    id: 'forehand-spacing-15',
+    level: '1.5',
+    category: '正手',
+    title: '给挥拍留出空间',
+    fact: '正手击球时，球与身体之间需要留出能自然挥拍的距离。',
+    why: '靠球太近会挤住手臂，离球太远又只能伸手够球。',
+    drill: '慢速喂球 15 个，每球先用小碎步调整距离，再完整挥拍。',
+    focus: '今天记录：失误时是离球太近，还是离球太远？',
+  },
+  {
+    id: 'forehand-depth-shape-25',
+    level: '2.5',
+    category: '正手',
+    title: '用弧线换取深度',
+    fact: '稳定的正手不必贴网飞行，适当过网高度能增加容错。',
+    why: '一味压低线路会缩小安全空间，连续回合中更容易下网。',
+    drill: '连续打 15 个正手，要求过网高度明显高于球网并落到发球线后。',
+    focus: '今天记录：正手的过网高度和落点深度是否稳定？',
+  },
+  {
+    id: 'forehand-short-ball-30',
+    level: '3.0',
+    category: '正手',
+    title: '短球先上步再加速',
+    fact: '进攻短球的前提是身体进入场内，而不是站在底线伸手发力。',
+    why: '站位不到位时强行加速，击球点和拍面都会失去控制。',
+    drill: '教练交替喂深球和短球，识别短球后上步，在身体前方完成击球。',
+    focus: '今天记录：看到短球后是否及时向前，而不是留在底线？',
+  },
+  {
+    id: 'forehand-direction-balance-30',
+    level: '3.0',
+    category: '正手',
+    title: '变线前先站稳',
+    fact: '正手改变线路需要稳定的击球点，不能只靠手腕临时拐方向。',
+    why: '身体失衡时变线，拍面更容易过早打开或关闭。',
+    drill: '先打两拍斜线，第三拍在站稳后改直线，连续完成 8 组。',
+    focus: '今天记录：变线时是身体控制方向，还是手腕临时补救？',
+  },
+  {
+    id: 'backhand-two-hands-10',
+    level: '1.0',
+    category: '反手',
+    title: '双手一起稳定拍面',
+    fact: '双手反手初学时，两只手要共同控制球拍，避免持拍手单独硬拉。',
+    why: '只用一只手发力会让拍面晃动，也很难完成转肩。',
+    drill: '原地慢挥 20 次，保持双手连接，感受肩膀带着球拍转动。',
+    focus: '今天记录：反手挥拍时，两只手有没有始终一起工作？',
+  },
+  {
+    id: 'backhand-racket-ready-15',
+    level: '1.5',
+    category: '反手',
+    title: '转肩时把球拍一起带走',
+    fact: '反手准备不是先跑到球边再拉拍，而是判断方向后立即转肩带拍。',
+    why: '移动结束才开始引拍，会压缩击球时间，让动作变得仓促。',
+    drill: '对方出球后先完成转肩架拍，再移动到击球位置，连续 15 球。',
+    focus: '今天记录：反手引拍是在移动中完成，还是到位后才开始？',
+  },
+  {
+    id: 'backhand-contact-front-20',
+    level: '2.0',
+    category: '反手',
+    title: '反手击球点也要靠前',
+    fact: '反手需要在身体前侧接触球，才能自然向前送拍。',
+    why: '等球进入身体侧面后再打，手臂容易被挤住，线路也难控制。',
+    drill: '慢速反手 20 个，在场地上标记理想击球区，只检查接触位置。',
+    focus: '今天记录：反手击球点是在身体前方，还是已经落到侧面？',
+  },
+  {
+    id: 'backhand-crosscourt-25',
+    level: '2.5',
+    category: '反手',
+    title: '先建立稳定反手斜线',
+    fact: '反手斜线距离更长，适合用来建立连续性和安全感。',
+    why: '基础还不稳定时频繁变直线，会放大击球点和拍面误差。',
+    drill: '反手斜线连续 10 球，以落在发球线后方为合格。',
+    focus: '今天记录：反手能否连续控制同一条安全线路？',
+  },
+  {
+    id: 'backhand-high-ball-30',
+    level: '3.0',
+    category: '反手',
+    title: '高球不要等到身后',
+    fact: '反手高球需要更早判断，可以上步抢高点，也可以后退争取下降期。',
+    why: '犹豫会让球落到肩后，只能仓促抬手处理。',
+    drill: '交替练习上步抢高点和后退等下降期，每种处理各 8 球。',
+    focus: '今天记录：面对反手高球时，是否提前做出了处理选择？',
+  },
+  {
+    id: 'backhand-direction-30',
+    level: '3.0',
+    category: '反手',
+    title: '反手变线要选合适来球',
+    fact: '只有站位稳定、击球点靠前的来球，才适合从斜线改打直线。',
+    why: '被动来球强行变线，既缩短场地距离，又容易暴露空当。',
+    drill: '两拍反手斜线后，只在来球较短且身体平衡时尝试直线。',
+    focus: '今天记录：反手变线是主动选择，还是被动冒险？',
+  },
+  {
+    id: 'serve-start-rhythm-10',
+    level: '1.0',
+    category: '发球',
+    title: '每次发球从同一节奏开始',
+    fact: '固定的准备动作和呼吸节奏，能让抛球与挥拍更容易重复。',
+    why: '每次起动方式不同，后面的动作顺序也会跟着变化。',
+    drill: '不追求球速，连续发 10 个球，每次都先停稳、呼气再开始。',
+    focus: '今天记录：每次发球的准备节奏是否一致？',
+  },
+  {
+    id: 'serve-toss-arm-15',
+    level: '1.5',
+    category: '发球',
+    title: '抛球手多停留一会',
+    fact: '抛球后让手臂继续向上延伸，有助于保持身体向上和抛球稳定。',
+    why: '抛球手过早落下，身体容易提前塌下，击球点也会降低。',
+    drill: '做 15 次影子发球，抛球手伸向上方，等挥拍启动后再自然落下。',
+    focus: '今天记录：抛球手是否过早掉下来？',
+  },
+  {
+    id: 'serve-contact-reach-20',
+    level: '2.0',
+    category: '发球',
+    title: '向上伸展完成击球',
+    fact: '发球击球点应尽量在身体上方伸展开，而不是等球掉低后横着打。',
+    why: '击球点过低会压缩过网角度，也让动作难以连贯。',
+    drill: '半速发球 12 个，只关注向上伸展和在高点击球。',
+    focus: '今天记录：击球时身体是否充分向上伸展？',
+  },
+  {
+    id: 'serve-second-spin-25',
+    level: '2.5',
+    category: '发球',
+    title: '二发先建立弧线',
+    fact: '第二发需要比第一发更大的安全空间，优先用向上的挥拍路径制造弧线。',
+    why: '害怕双误而减速推球，反而容易让动作中断和落点失控。',
+    drill: '连续练 15 个二发，用完整挥拍越过球网，不追求速度。',
+    focus: '今天记录：二发是完整挥拍，还是因为怕失误而减速？',
+  },
+  {
+    id: 'serve-first-ball-25',
+    level: '2.5',
+    category: '发球',
+    title: '发球后立刻准备下一拍',
+    fact: '发球动作结束后要快速恢复平衡，不能站着看发球结果。',
+    why: '恢复过慢会让对方的接发球直接压到身体。',
+    drill: '每次发球后立即做一次准备垫步，再由同伴回一拍到场内。',
+    focus: '今天记录：发球落地后是否及时恢复并准备第一拍？',
+  },
+  {
+    id: 'serve-pattern-30',
+    level: '3.0',
+    category: '发球',
+    title: '发球要和下一拍连起来',
+    fact: '发球落点的价值在于创造可预期的回球，而不是只追求直接得分。',
+    why: '没有下一拍计划，即使发球占优也可能很快失去主动。',
+    drill: '选择一个发球落点，并预设下一拍打向空当，连续演练 10 组。',
+    focus: '今天记录：发球前是否想清楚了下一拍的方向？',
+  },
+  {
+    id: 'footwork-ready-balance-10',
+    level: '1.0',
+    category: '步伐',
+    title: '准备姿势让双脚保持可移动',
+    fact: '等待来球时双脚略宽、膝盖微屈，比直立站死更容易启动。',
+    why: '重心过高或压在脚跟上，第一步会明显变慢。',
+    drill: '每次喂球前做准备姿势，轻轻弹动双脚，再向来球方向移动。',
+    focus: '今天记录：等待来球时，重心是否在前脚掌附近？',
+  },
+  {
+    id: 'footwork-turn-before-run-15',
+    level: '1.5',
+    category: '步伐',
+    title: '转身和启动同时发生',
+    fact: '判断来球方向后，转肩架拍应与第一步移动同步进行。',
+    why: '只顾跑动、不提前准备球拍，到位后仍然来不及击球。',
+    drill: '同伴随机喂左右球，第一步移动时同时完成转肩，连续 12 球。',
+    focus: '今天记录：移动时球拍已经准备，还是跑到位才开始拉拍？',
+  },
+  {
+    id: 'footwork-recovery-steps-20',
+    level: '2.0',
+    category: '步伐',
+    title: '远离中间时先用大步回位',
+    fact: '被拉出场外后，可以先用交叉步快速覆盖距离，再用小步调整。',
+    why: '全程只用小碎步会回位太慢，全程大步又难以停稳。',
+    drill: '从单打边线击球后，先交叉步回移，再小步进入准备姿势，练 10 组。',
+    focus: '今天记录：回位步伐是否兼顾了速度和最后的平衡？',
+  },
+  {
+    id: 'footwork-brake-balance-25',
+    level: '2.5',
+    category: '步伐',
+    title: '到位后要会减速',
+    fact: '跑到球旁边只是第一步，击球前还需要用调整步控制身体速度。',
+    why: '身体仍在横向漂移时，击球点和方向都会不稳定。',
+    drill: '跑动正手 12 球，要求击球前出现清晰的减速和最后调整步。',
+    focus: '今天记录：击球瞬间身体是否还在失控地向外冲？',
+  },
+  {
+    id: 'footwork-inside-out-30',
+    level: '3.0',
+    category: '步伐',
+    title: '侧身正手要给回位留空间',
+    fact: '使用侧身正手前，需要判断来球时间和击球后的场地空当。',
+    why: '绕得太晚或击球后停在反手位，会把正手优势变成失位。',
+    drill: '反手位侧身正手后立即回补中间，连续完成击球与回位 8 组。',
+    focus: '今天记录：侧身正手后是否及时覆盖了空出的场地？',
+  },
+  {
+    id: 'footwork-attack-transition-30',
+    level: '3.0',
+    category: '步伐',
+    title: '进攻后继续向前衔接',
+    fact: '打出有压迫的短球后，应根据球质向前移动，而不是自动退回底线。',
+    why: '进攻后后退会主动放弃场地，让对手重新获得时间。',
+    drill: '底线进攻球后向前跟进，在发球线附近完成下一拍，练 10 组。',
+    focus: '今天记录：打出进攻球后，脚步是否继续向前？',
+  },
+  {
+    id: 'volley-racket-front-10',
+    level: '1.0',
+    category: '截击',
+    title: '截击准备时球拍放在前面',
+    fact: '网前等待时，球拍应保持在胸前，便于左右两侧快速反应。',
+    why: '球拍垂下或拉到身后，会错过短暂的截击时机。',
+    drill: '同伴近距离轻抛左右球，始终从胸前准备位置完成挡球。',
+    focus: '今天记录：每次截击前，球拍有没有回到身体前方？',
+  },
+  {
+    id: 'volley-contact-front-10',
+    level: '1.0',
+    category: '截击',
+    title: '在身体前方挡住球',
+    fact: '截击需要在身体前方接触球，借助来球力量完成回球。',
+    why: '球进入身体侧面后，拍面更难稳定，也容易被球顶住。',
+    drill: '原地截击 15 个，只检查击球点是否保持在身体前方。',
+    focus: '今天记录：截击点在前方，还是已经落到身体旁边？',
+  },
+  {
+    id: 'volley-split-step-15',
+    level: '1.5',
+    category: '截击',
+    title: '对方击球时做网前垫步',
+    fact: '网前距离短、来球快，需要在对方击球瞬间完成轻小的启动步。',
+    why: '站死等待会让身体无法及时向左右两侧反应。',
+    drill: '同伴随机打左右截击球，每次都在对方触球时轻轻垫步。',
+    focus: '今天记录：网前启动是在来球后，还是对方击球时？',
+  },
+  {
+    id: 'volley-face-stable-15',
+    level: '1.5',
+    category: '截击',
+    title: '截击时保持拍面稳定',
+    fact: '截击主要依靠稳定拍面和身体向前，不需要手腕主动翻动。',
+    why: '手腕变化太多会让出球方向和高度难以预测。',
+    drill: '连续截击 15 球，握拍保持稳定，结束时拍面仍朝向目标。',
+    focus: '今天记录：截击时拍面是否被手腕带着晃动？',
+  },
+  {
+    id: 'volley-step-through-20',
+    level: '2.0',
+    category: '截击',
+    title: '用身体向前完成截击',
+    fact: '截击的力量更多来自身体重心向前，而不是大幅挥动球拍。',
+    why: '只用手臂推球容易失去拍面稳定，也难以控制深度。',
+    drill: '正反手截击各 10 球，触球时向前迈一步并保持上身稳定。',
+    focus: '今天记录：截击力量来自向前移动，还是手臂大幅挥动？',
+  },
+  {
+    id: 'volley-direction-25',
+    level: '2.5',
+    category: '截击',
+    title: '截击方向由拍面决定',
+    fact: '网前改变线路应提前调整拍面和站位，不要在触球时甩手。',
+    why: '临时用手腕变向会降低稳定性，也容易把球打出边线。',
+    drill: '同一位置轮流截击直线和斜线，各完成 8 个目标球。',
+    focus: '今天记录：截击变向前，拍面是否已经对准目标？',
+  },
+  {
+    id: 'volley-first-depth-25',
+    level: '2.5',
+    category: '截击',
+    title: '第一拍截击优先打深',
+    fact: '从底线向网前过渡时，第一拍截击通常需要深度来继续压缩对手时间。',
+    why: '第一拍过短会让对手轻松上前，反而把自己留在尴尬位置。',
+    drill: '从发球线附近练第一截击，目标落在对方发球线后方。',
+    focus: '今天记录：第一拍截击是否给自己争取了继续上网的时间？',
+  },
+  {
+    id: 'volley-close-net-30',
+    level: '3.0',
+    category: '截击',
+    title: '好截击后继续封住球网',
+    fact: '第一拍截击质量足够时，应继续向前占据更有利的位置。',
+    why: '停在发球线附近会留下脚下和两侧空当，也削弱角度优势。',
+    drill: '第一截击打深后再向前两步，完成第二拍终结截击，练 8 组。',
+    focus: '今天记录：第一截击后是否根据球质继续向前？',
+  },
+  {
+    id: 'volley-low-control-30',
+    level: '3.0',
+    category: '截击',
+    title: '低截击先控制高度',
+    fact: '低于球网的截击需要先把球托过网，不能强行向下压。',
+    why: '击球点低时下压空间不足，强攻更容易直接下网。',
+    drill: '从发球线练低截击 12 球，目标是低弧线落入对方场地深区。',
+    focus: '今天记录：低截击时是否根据击球高度选择了安全线路？',
+  },
+  {
+    id: 'tactics-clear-net-10',
+    level: '1.0',
+    category: '战术',
+    title: '先让球安全越过球网',
+    fact: '初学阶段最重要的战术，是给回球留出足够过网高度。',
+    why: '过早追求贴网和边线，会让回合在建立之前就结束。',
+    drill: '连续对打 10 球，要求每球明显高过球网，不追求速度。',
+    focus: '今天记录：失误更多来自下网，还是落点过深？',
+  },
+  {
+    id: 'tactics-middle-10',
+    level: '1.0',
+    category: '战术',
+    title: '不确定时先打场地中间',
+    fact: '来不及判断方向时，把球打向中间比勉强追求边线更安全。',
+    why: '中间目标距离误差区更远，也能争取时间恢复站位。',
+    drill: '教练随机喂球，来不及准备时统一回到场地中间区域。',
+    focus: '今天记录：被动时有没有选择更大的安全目标？',
+  },
+  {
+    id: 'tactics-rally-first-15',
+    level: '1.5',
+    category: '战术',
+    title: '先把回合建立起来',
+    fact: '连续回球能力比偶尔一拍大力制胜更能反映基础稳定性。',
+    why: '过早加速会放大动作误差，也失去观察来球的机会。',
+    drill: '每个回合先完成 5 拍稳定对打，第 6 拍后才能尝试加速。',
+    focus: '今天记录：是否在回合还没建立时就急着发力？',
+  },
+  {
+    id: 'tactics-recover-middle-15',
+    level: '1.5',
+    category: '战术',
+    title: '击球后回到能覆盖两边的位置',
+    fact: '单打回位不是固定踩在线上，而是回到能兼顾对手主要回球方向的位置。',
+    why: '打完后停在原地，会让下一球需要跨越更长距离。',
+    drill: '每次击球后都做一次明确回位，再由同伴喂下一球，连续 10 组。',
+    focus: '今天记录：击球后有没有主动寻找下一拍的准备位置？',
+  },
+  {
+    id: 'tactics-depth-20',
+    level: '2.0',
+    category: '战术',
+    title: '用深球限制对手',
+    fact: '稳定落在发球线后的球，能让对手更难进入场内进攻。',
+    why: '回球长期停在发球线内，会给对手充足时间向前施压。',
+    drill: '底线连续对打 15 球，以落在对方发球线后方为主要目标。',
+    focus: '今天记录：回球深度是否足以让对手留在底线附近？',
+  },
+  {
+    id: 'tactics-defend-crosscourt-20',
+    level: '2.0',
+    category: '战术',
+    title: '被动时优先回斜线',
+    fact: '被拉出场外时，斜线通常拥有更长距离和更大过网空间。',
+    why: '被动状态强行打直线，会缩短飞行距离并暴露更大空当。',
+    drill: '同伴把球喂向边线，跑动到位后统一高弧线回斜线。',
+    focus: '今天记录：被动时是否仍在冒险改变线路？',
+  },
+  {
+    id: 'tactics-short-ball-25',
+    level: '2.5',
+    category: '战术',
+    title: '识别短球再进入场内',
+    fact: '进攻机会来自对方回球变短，而不是每一拍都主动向前冲。',
+    why: '深球时盲目上步会挤压击球空间，也容易被下一球穿越。',
+    drill: '同伴随机喂深浅球，只在球落到发球线附近时向前进攻。',
+    focus: '今天记录：上步进攻前是否真正识别到了短球？',
+  },
+  {
+    id: 'tactics-change-direction-30',
+    level: '3.0',
+    category: '战术',
+    title: '变线要建立在主动球上',
+    fact: '改变线路更适合站位稳定、击球点靠前的来球。',
+    why: '被动球变线既增加击球难度，也会让自己的场地空当变大。',
+    drill: '先用斜线建立回合，只在接到短球或慢球时尝试改直线。',
+    focus: '今天记录：每次变线前，你是否处于身体平衡的主动状态？',
   },
 ]
 
@@ -251,8 +629,7 @@ function levelDistance(a: TennisLevel, b: TennisLevel): number {
 }
 
 function dateSeed(date = new Date()): number {
-  const text = date.toISOString().slice(0, 10)
-  return text.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
+  return Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86400000)
 }
 
 function recordText(records: TrainingRecord[]): string {
@@ -274,6 +651,7 @@ export function getRecommendedTrainingPrompt(
   level: TennisLevel,
   records: TrainingRecord[],
   offset = 0,
+  date = new Date(),
 ): TennisKnowledgeCard {
   const recentText = recordText(records)
   const scored = TENNIS_KNOWLEDGE_CARDS
@@ -285,7 +663,13 @@ export function getRecommendedTrainingPrompt(
     })
     .sort((a, b) => b.score - a.score || a.card.id.localeCompare(b.card.id))
 
-  const bestScore = scored[0]?.score ?? 0
-  const pool = scored.filter(item => item.score >= bestScore - 1).map(item => item.card)
-  return pool[(dateSeed() + offset) % pool.length] ?? TENNIS_KNOWLEDGE_CARDS[0]
+  const categories = Array.from(new Set(TENNIS_KNOWLEDGE_CARDS.map(card => card.category)))
+  const recentCategories = new Set(categories.filter(category => recentText.includes(category)))
+  const sameLevel = scored.filter(item => item.card.level === level)
+  const related = recentCategories.size > 0
+    ? sameLevel.filter(item => recentCategories.has(item.card.category))
+    : sameLevel
+  const pool = (related.length > 0 ? related : sameLevel).map(item => item.card)
+
+  return pool[(dateSeed(date) + offset) % pool.length] ?? TENNIS_KNOWLEDGE_CARDS[0]
 }

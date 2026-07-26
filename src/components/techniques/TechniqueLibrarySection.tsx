@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
+import { auditTechniques, type DuplicateTechniqueGroup } from '../../lib/techniqueMaintenance'
 import type { Sport, TechniqueNote } from '../../types'
+import TechniqueMaintenancePanel from './TechniqueMaintenancePanel'
 
 type SortMode = 'time' | 'votes'
 
@@ -9,6 +11,7 @@ interface TechniqueLibrarySectionProps {
   onEdit: (note: TechniqueNote) => void
   onDelete: (id: string) => void
   onVote: (id: string, current: number) => void
+  onMerge: (group: DuplicateTechniqueGroup) => void
 }
 
 export default function TechniqueLibrarySection({
@@ -17,12 +20,14 @@ export default function TechniqueLibrarySection({
   onEdit,
   onDelete,
   onVote,
+  onMerge,
 }: TechniqueLibrarySectionProps) {
   const [categoryFilter, setCategoryFilter] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<SortMode>('time')
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const categories = sport.categories ?? []
+  const categories = sport.categories
+  const audit = useMemo(() => auditTechniques(notes, categories), [categories, notes])
 
   const filteredNotes = useMemo(() => notes
     .filter(note => !categoryFilter || note.category === categoryFilter)
@@ -61,6 +66,14 @@ export default function TechniqueLibrarySection({
             />
           ))}
         </div>
+      )}
+
+      {notes.length > 0 && (
+        <TechniqueMaintenancePanel
+          audit={audit}
+          accentColor={sport.accentColor}
+          onMerge={onMerge}
+        />
       )}
 
       {notes.length > 0 && (

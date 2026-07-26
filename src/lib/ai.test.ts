@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { installMemoryStorage } from '../test/memoryStorage'
-import { polishText, setAIConfig, streamChatMessage } from './ai'
+import { generateTechniques, polishText, setAIConfig, streamChatMessage } from './ai'
 
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -76,6 +76,58 @@ describe('AI transport', () => {
       status: 503,
       message: '模型不可用',
     })
+  })
+
+  it('生成技巧时参考已有内容并过滤同名重复', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      choices: [{
+        message: {
+          content: JSON.stringify([
+            {
+              title: '挥拍顺序',
+              content: '重复内容',
+              category: '正手',
+              tags: ['挥拍'],
+            },
+            {
+              title: '击球前减速',
+              content: '问题：跑过头；动作：小步减速；练习：喂球10次；标准：击球时身体平衡。',
+              category: '步伐',
+              tags: ['减速', '平衡'],
+            },
+          ]),
+        },
+      }],
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await generateTechniques([{
+      id: 'record-1',
+      sportId: 'tennis',
+      date: '2026-07-26',
+      duration: 60,
+      coach: '',
+      content: '跑动击球时经常冲过头',
+      contentOriginal: '跑动击球时经常冲过头',
+      reflection: '',
+      reflectionOriginal: '',
+      polishStatus: 'none',
+      createdAt: '2026-07-26T00:00:00.000Z',
+      updatedAt: '2026-07-26T00:00:00.000Z',
+    }], '网球', ['正手', '步伐'], [{
+      title: '挥拍顺序',
+      category: '正手',
+    }])
+
+    expect(result).toEqual([{
+      title: '击球前减速',
+      content: '问题：跑过头；动作：小步减速；练习：喂球10次；标准：击球时身体平衡。',
+      category: '步伐',
+      tags: ['减速', '平衡'],
+    }])
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1]?.body as string)
+    expect(requestBody.messages[0].content).toContain('[正手] 挥拍顺序')
+    expect(requestBody.messages[0].content).toContain('问题：…；动作：…；练习：…；标准：…')
   })
 
   it('读取没有换行结尾的最后一个流式片段', async () => {
