@@ -6,6 +6,7 @@ import {
   DEFAULT_EXPORT_OPTIONS,
   DEFAULT_SPORT,
   deleteSport,
+  exportAll,
   getRecords,
   getTechniques,
   hasImportRestorePoint,
@@ -55,6 +56,17 @@ describe('storage import and sport isolation', () => {
     })
     restoreLastImport()
     expect(getRecords().map(item => item.id)).toEqual(['before'])
+  })
+
+  it('完整导出时修复历史孤儿运动引用且不改写当前数据', () => {
+    localStorage.setItem(STORAGE_KEYS.sports, JSON.stringify([DEFAULT_SPORT]))
+    localStorage.setItem(STORAGE_KEYS.records, JSON.stringify([record('orphan', 'missing-sport')]))
+
+    const exported = JSON.parse(exportAll())
+
+    expect(exported.records[0].sportId).toBe('tennis')
+    expect(exported.sports.map((sport: { id: string }) => sport.id)).toEqual(['tennis'])
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.records) ?? '[]')[0].sportId).toBe('missing-sport')
   })
 
   it('写入中途失败时回滚已修改的数据', () => {

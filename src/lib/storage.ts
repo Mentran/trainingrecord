@@ -206,6 +206,15 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   conversations: true,
 }
 
+function repairMissingSportReferences<T extends { sportId: string }>(
+  items: T[],
+  sportIds: Set<string>,
+): T[] {
+  return items.map(item => sportIds.has(item.sportId)
+    ? item
+    : { ...item, sportId: DEFAULT_SPORT.id })
+}
+
 function getConversationsForBackup(): Conversation[] {
   try {
     const raw = localStorage.getItem(CONVERSATIONS_KEY)
@@ -221,15 +230,20 @@ function getConversationsForBackup(): Conversation[] {
 }
 
 export function exportAll(options: ExportOptions = DEFAULT_EXPORT_OPTIONS): string {
+  const sports = getSports()
+  const sportIds = new Set(sports.map(sport => sport.id))
+  sportIds.add(DEFAULT_SPORT.id)
   const backup: AppBackup = {
     version: 2,
     exportedAt: new Date().toISOString(),
   }
-  if (options.records) backup.records = getRecords()
-  if (options.techniques) backup.techniques = getTechniques()
-  if (options.sports) backup.sports = getSports()
-  if (options.conversations) backup.conversations = getConversationsForBackup()
-  return JSON.stringify(backup, null, 2)
+  if (options.records) backup.records = repairMissingSportReferences(getRecords(), sportIds)
+  if (options.techniques) backup.techniques = repairMissingSportReferences(getTechniques(), sportIds)
+  if (options.sports) backup.sports = sports
+  if (options.conversations) backup.conversations = repairMissingSportReferences(getConversationsForBackup(), sportIds)
+  const json = JSON.stringify(backup, null, 2)
+  parseBackupJson(json)
+  return json
 }
 
 export function validateBackup(json: string): { valid: boolean; summary: string; error?: string } {
