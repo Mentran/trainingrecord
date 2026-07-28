@@ -428,6 +428,18 @@ export default function SettingsPage() {
           reminder={shouldRemindBackup ? backupReminder : undefined}
           onBackupCreated={handleBackupCreated}
         />
+
+        <footer className="pb-2 text-center">
+          <a
+            href="https://github.com/Mentran/trainingrecord"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-[#9B9B9B] hover:text-[#6B7280] transition-colors"
+          >
+            GitHub 源码
+            <span aria-hidden="true">↗</span>
+          </a>
+        </footer>
       </div>
 
       {/* 删除确认弹窗 */}

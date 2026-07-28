@@ -1,9 +1,11 @@
-const CACHE_NAME = 'training-app-v2'
+const CACHE_NAME = 'training-app-v3'
+const APP_ROOT = new URL('./', self.registration.scope).href
+const APP_INDEX = new URL('index.html', self.registration.scope).href
 
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache =>
-      cache.addAll(['/', '/index.html'])
+      cache.addAll([APP_ROOT, APP_INDEX])
     )
   )
   self.skipWaiting()
@@ -22,7 +24,7 @@ self.addEventListener('fetch', event => {
   // Navigation requests: network first, fall back to cached index.html
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match('/index.html'))
+      fetch(event.request).catch(() => caches.match(APP_INDEX))
     )
     return
   }

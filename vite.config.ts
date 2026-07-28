@@ -130,5 +130,6 @@ function localFileStorePlugin(): Plugin {
 }
 
 export default defineConfig({
+  base: process.env.VITE_BASE_PATH ?? '/',
   plugins: [localFileStorePlugin(), react(), tailwindcss()],
 })
