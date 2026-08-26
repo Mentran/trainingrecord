@@ -148,6 +148,60 @@ describe('AI transport', () => {
     expect(output).toBe('尾片段')
   })
 
+  it('DeepSeek 思考片段后仍能读到正文', async () => {
+    const encoder = new TextEncoder()
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"reasoning_content":"思考"}}]}\n'))
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"建议转腰"}}]}\n'))
+        controller.enqueue(encoder.encode('data: [DONE]\n'))
+        controller.close()
+      },
+    })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, { status: 200 })))
+    let output = ''
+
+    await streamChatMessage('问题', [], [], [], chunk => {
+      output += chunk
+    })
+
+    expect(output).toBe('建议转腰')
+  })
+
+  it('对忽略 stream 的接口回退解析完整 JSON', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({
+      choices: [{ message: { content: '完整回复' } }],
+    })))
+    let output = ''
+
+    await streamChatMessage('问题', [], [], [], chunk => {
+      output += chunk
+    })
+
+    expect(output).toBe('完整回复')
+  })
+
+  it('官方 DeepSeek 关闭思考模式以免占满输出额度', async () => {
+    setAIConfig({
+      apiUrl: 'https://api.deepseek.com',
+      apiKey: 'test-key',
+      model: 'deepseek-v4-flash',
+      format: 'openai',
+    })
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      choices: [{
+        message: { content: '{"content":"动作更完整","reflection":""}' },
+      }],
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await polishText('原内容', '')
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.deepseek.com/v1/chat/completions')
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1]?.body as string)
+    expect(requestBody.thinking).toEqual({ type: 'disabled' })
+  })
+
   it('不再忽略损坏的流式 JSON', async () => {
     const encoder = new TextEncoder()
     const body = new ReadableStream({

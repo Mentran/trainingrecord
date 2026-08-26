@@ -44,21 +44,27 @@ export const categorizedTechniquesSchema = z.array(z.object({
   category: nonEmptyString,
 })).max(200)
 
+const textPartSchema = z.object({
+  type: z.string().optional(),
+  text: z.string().optional(),
+}).passthrough()
+
+const messageContentSchema = z.union([
+  z.string(),
+  z.null(),
+  z.array(z.union([z.string(), textPartSchema])),
+]).optional()
+
 const anthropicResponseSchema = z.object({
-  content: z.union([
-    z.string(),
-    z.array(z.object({
-      type: z.string().optional(),
-      text: z.string().optional(),
-    }).passthrough()),
-  ]).optional(),
+  content: messageContentSchema,
 }).passthrough()
 
 const openAIResponseSchema = z.object({
   choices: z.array(z.object({
     message: z.object({
-      content: z.string().nullable().optional(),
-    }).passthrough(),
+      content: messageContentSchema,
+    }).passthrough().optional(),
+    finish_reason: z.string().nullable().optional(),
   }).passthrough()).optional(),
   output: z.string().optional(),
 }).passthrough()
@@ -85,13 +91,29 @@ const anthropicStreamSchema = z.object({
 const openAIStreamSchema = z.object({
   choices: z.array(z.object({
     delta: z.object({
-      content: z.string().nullable().optional(),
-    }).passthrough(),
+      content: messageContentSchema,
+    }).passthrough().optional(),
+    message: z.object({
+      content: messageContentSchema,
+    }).passthrough().optional(),
+    finish_reason: z.string().nullable().optional(),
   }).passthrough()).optional(),
   error: z.object({
     message: z.string().optional(),
   }).passthrough().optional(),
 }).passthrough()
+
+function extractMessageText(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content.map(part => {
+    if (typeof part === 'string') return part
+    if (part && typeof part === 'object' && 'text' in part && typeof part.text === 'string') {
+      return part.text
+    }
+    return ''
+  }).join('')
+}
 
 export function stripJsonCodeFence(text: string): string {
   return text
@@ -113,23 +135,27 @@ export function parseAIJson<T>(text: string, schema: z.ZodType<T>, label: string
   }
 }
 
+const EMPTY_CONTENT_MESSAGE = 'AI 没有返回正文。若使用 DeepSeek 等思考模型，思考过程会占用输出额度，请稍后重试'
+
 export function extractProviderText(raw: unknown): string {
   const anthropic = anthropicResponseSchema.safeParse(raw)
   if (anthropic.success) {
-    if (typeof anthropic.data.content === 'string' && anthropic.data.content.trim()) {
-      return anthropic.data.content
-    }
-    if (Array.isArray(anthropic.data.content)) {
-      const text = anthropic.data.content.find(block => typeof block.text === 'string' && block.text.trim())?.text
-      if (text) return text
-    }
+    const text = extractMessageText(anthropic.data.content)
+    if (text.trim()) return text
   }
 
   const openAI = openAIResponseSchema.safeParse(raw)
   if (openAI.success) {
-    const text = openAI.data.choices?.[0]?.message.content
-    if (text?.trim()) return text
+    const text = extractMessageText(openAI.data.choices?.[0]?.message?.content)
+    if (text.trim()) return text
     if (openAI.data.output?.trim()) return openAI.data.output
+    if (openAI.data.choices) {
+      throw new AIError('empty_response', EMPTY_CONTENT_MESSAGE)
+    }
+  }
+
+  if (anthropic.success && anthropic.data.content !== undefined) {
+    throw new AIError('empty_response', EMPTY_CONTENT_MESSAGE)
   }
 
   throw new AIError('response_format', 'API 返回格式无法识别，请检查 API URL 和格式设置')
@@ -145,9 +171,7 @@ export function extractAPIErrorMessage(raw: unknown): string | undefined {
 export function extractStreamText(raw: unknown, anthropic: boolean): string {
   if (anthropic) {
     const parsed = anthropicStreamSchema.safeParse(raw)
-    if (!parsed.success) {
-      throw new AIError('response_format', 'AI 流式返回格式异常')
-    }
+    if (!parsed.success) return ''
     if (parsed.data.type === 'error') {
       throw new AIError('http', parsed.data.error?.message ?? 'AI 流式请求失败')
     }
@@ -157,11 +181,12 @@ export function extractStreamText(raw: unknown, anthropic: boolean): string {
   }
 
   const parsed = openAIStreamSchema.safeParse(raw)
-  if (!parsed.success) {
-    throw new AIError('response_format', 'AI 流式返回格式异常')
-  }
+  if (!parsed.success) return ''
   if (parsed.data.error) {
     throw new AIError('http', parsed.data.error.message ?? 'AI 流式请求失败')
   }
-  return parsed.data.choices?.[0]?.delta.content ?? ''
+  const choice = parsed.data.choices?.[0]
+  const fromDelta = extractMessageText(choice?.delta?.content)
+  if (fromDelta) return fromDelta
+  return extractMessageText(choice?.message?.content)
 }

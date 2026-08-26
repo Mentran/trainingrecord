@@ -106,6 +106,10 @@ interface FetchResult {
 const DEFAULT_REQUEST_TIMEOUT_MS = 45_000
 const STREAM_REQUEST_TIMEOUT_MS = 120_000
 
+function isOfficialDeepSeek(config: AIConfig): boolean {
+  return /deepseek\.com/i.test(config.apiUrl)
+}
+
 function buildBody(config: AIConfig, opts: CallOptions): Record<string, unknown> {
   if (isAnthropicFormat(config)) {
     return {
@@ -123,6 +127,9 @@ function buildBody(config: AIConfig, opts: CallOptions): Record<string, unknown>
     model: config.model,
     max_tokens: opts.max_tokens,
     ...(opts.stream ? { stream: true } : {}),
+    // DeepSeek V4 默认开启思考模式，思考 token 会计入 max_tokens，
+    // 对话/技巧这类长输出容易只返回 reasoning_content、正文为空。
+    ...(isOfficialDeepSeek(config) ? { thinking: { type: 'disabled' } } : {}),
     messages,
   }
 }
@@ -341,7 +348,11 @@ ${existingContext}
 请严格按以下 JSON 数组格式返回，不要有其他内容：
 [{"title":"动作名称","content":"技术要点说明","category":"分类名","tags":["细分标签1","细分标签2"]}]`
 
-  const data = await callAPI(config, { max_tokens: 1500, messages: [{ role: 'user', content: prompt }] })
+  const data = await callAPI(config, {
+    max_tokens: 4096,
+    timeoutMs: 90_000,
+    messages: [{ role: 'user', content: prompt }],
+  })
   return normalizeGeneratedTechniques(
     parseAIJson(data, generatedTechniquesSchema, 'AI 技巧返回'),
     categories,
@@ -428,7 +439,11 @@ ${existingContext}
 请严格按以下 JSON 数组格式返回，不要有其他内容：
 [{"title":"动作名称","content":"技术要点说明","category":"分类名","tags":["细分标签1","细分标签2"]}]`
 
-  const data = await callAPI(config, { max_tokens: 1500, messages: [{ role: 'user', content: prompt }] })
+  const data = await callAPI(config, {
+    max_tokens: 4096,
+    timeoutMs: 90_000,
+    messages: [{ role: 'user', content: prompt }],
+  })
   return normalizeGeneratedTechniques(
     parseAIJson(data, generatedTechniquesSchema, 'AI 经验解析返回'),
     categories,
@@ -598,7 +613,7 @@ export async function streamChatMessage(
 ): Promise<void> {
   const config = getAIConfig()
   const opts: CallOptions = {
-    max_tokens: 1024,
+    max_tokens: 4096,
     stream: true,
     signal,
     system: buildSystemPrompt(sportName) + buildContext(records, techniques),
@@ -624,7 +639,9 @@ export async function streamChatMessage(
 
     const decoder = new TextDecoder()
     let buffer = ''
+    let rawBody = ''
     let receivedText = false
+    let sawSseData = false
     const anthropic = isAnthropicFormat(config)
 
     const processLine = (line: string): boolean => {
@@ -632,6 +649,7 @@ export async function streamChatMessage(
       if (!normalized.startsWith('data:')) return false
       const data = normalized.slice(5).trim()
       if (!data) return false
+      sawSseData = true
       if (data === '[DONE]') {
         if (!receivedText) throw new AIError('empty_response', 'AI 没有返回内容，请重试')
         return true
@@ -654,7 +672,9 @@ export async function streamChatMessage(
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
-      buffer += decoder.decode(value, { stream: true })
+      const decoded = decoder.decode(value, { stream: true })
+      rawBody += decoded
+      buffer += decoded
       const lines = buffer.split(/\r?\n/)
       buffer = lines.pop() ?? ''
       for (const line of lines) {
@@ -662,8 +682,21 @@ export async function streamChatMessage(
       }
     }
 
-    buffer += decoder.decode()
+    const flushed = decoder.decode()
+    rawBody += flushed
+    buffer += flushed
     if (buffer && processLine(buffer)) return
+    if (!receivedText && !sawSseData && rawBody.trim()) {
+      try {
+        const text = extractProviderText(JSON.parse(rawBody) as unknown)
+        if (text.trim()) {
+          onChunk(text)
+          return
+        }
+      } catch (error) {
+        if (isAIError(error)) throw error
+      }
+    }
     if (!receivedText) throw new AIError('empty_response', 'AI 没有返回内容，请重试')
   } catch (error) {
     if (isAIError(error)) throw error
