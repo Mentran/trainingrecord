@@ -16,6 +16,7 @@ import {
   sportCategoriesSchema,
 } from './aiSchemas'
 import type { GeneratedTechnique } from './aiSchemas'
+import { applyAiProxy, describeAiNetworkError } from './aiProxy'
 
 export type { GeneratedTechnique } from './aiSchemas'
 
@@ -66,10 +67,22 @@ export function hasApiKey(): boolean {
 
 // ── URL / format helpers ─────────────────────────────────
 
+function isOfficialDeepSeek(config: AIConfig): boolean {
+  try {
+    return new URL(config.apiUrl).hostname.toLowerCase() === 'api.deepseek.com'
+  } catch {
+    return false
+  }
+}
+
 function resolveUrl(config: AIConfig): string {
   const base = config.apiUrl.replace(/\/+$/, '')
-  if (base.includes('/v1/messages') || base.includes('/v1/chat/completions')) return base
-  return config.format === 'anthropic' ? `${base}/v1/messages` : `${base}/v1/chat/completions`
+  if (/\/messages$/i.test(base) || /\/chat\/completions$/i.test(base)) return base
+  if (config.format === 'anthropic') return `${base}/v1/messages`
+  // DeepSeek 官方 base URL 的 endpoint 是 /chat/completions，兼容其文档和 SDK。
+  // 其他 OpenAI 兼容服务通常仍使用 /v1/chat/completions。
+  if (/\/v1$/i.test(base)) return `${base}/chat/completions`
+  return isOfficialDeepSeek(config) ? `${base}/chat/completions` : `${base}/v1/chat/completions`
 }
 
 function isAnthropicFormat(config: AIConfig): boolean {
@@ -105,10 +118,6 @@ interface FetchResult {
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 45_000
 const STREAM_REQUEST_TIMEOUT_MS = 120_000
-
-function isOfficialDeepSeek(config: AIConfig): boolean {
-  return /deepseek\.com/i.test(config.apiUrl)
-}
 
 function buildBody(config: AIConfig, opts: CallOptions): Record<string, unknown> {
   if (isAnthropicFormat(config)) {
@@ -166,9 +175,10 @@ async function doFetch(config: AIConfig, opts: CallOptions): Promise<FetchResult
     opts.timeoutMs ?? (opts.stream ? STREAM_REQUEST_TIMEOUT_MS : DEFAULT_REQUEST_TIMEOUT_MS),
   )
   try {
-    const response = await fetch(url, {
+    const proxied = applyAiProxy(url, buildHeaders(config))
+    const response = await fetch(proxied.url, {
       method: 'POST',
-      headers: buildHeaders(config),
+      headers: proxied.headers,
       body: JSON.stringify(buildBody(config, opts)),
       signal: request.signal,
     })
@@ -181,11 +191,7 @@ async function doFetch(config: AIConfig, opts: CallOptions): Promise<FetchResult
     if (opts.signal?.aborted || (error as Error).name === 'AbortError') {
       throw new AIError('cancelled', 'AI 请求已取消', { cause: error })
     }
-    throw new AIError(
-      'network',
-      `无法连接到 API（${url}）\n可能原因：\n① 转接服务不支持浏览器直接访问（CORS 限制）\n② URL 填写有误\n③ 网络问题`,
-      { cause: error },
-    )
+    throw new AIError('network', describeAiNetworkError(url), { cause: error })
   }
 }
 

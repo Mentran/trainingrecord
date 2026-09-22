@@ -20,5 +20,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "localFileServer.ts"]
+  "include": ["vite.config.ts", "localFileServer.ts", "aiProxyServer.ts", "src/lib/aiProxyShared.ts"]
 }

@@ -74,7 +74,7 @@ export default function AISettingsSection({ config, onSave }: AISettingsSectionP
                   placeholder={draft.format === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.openai.com'}
                   className="w-full border border-[#E8E8E2] rounded-xl px-3 py-2.5 text-sm text-[#1A1A1A] outline-none focus:ring-2 focus:ring-[#9DC41A]/40 focus:border-[#9DC41A] font-mono"
                 />
-                <span className="block text-xs text-[#ADADAD] mt-1">填写 base URL 即可，路径自动补全</span>
+                <span className="block text-xs text-[#ADADAD] mt-1">填写 base URL 即可，路径自动补全。PackyAPI 的 OpenAI 兼容地址请填控制台 Endpoint（通常为 https://cf.api.fan/v1），不要填官网域名；在线版还需接口支持浏览器跨域。</span>
               </label>
               <label className="block">
                 <span className="block text-xs text-[#9B9B9B] mb-1">API Key</span>

@@ -3,8 +3,11 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Plugin } from 'vite'
 import { parseLocalFileData } from './src/lib/localFileSchema'
+import { AI_PROXY_PATH } from './src/lib/aiProxyShared'
+import { handleAiProxy } from './aiProxyServer'
 import { readRequestBody, RequestBodyTooLargeError } from './localFileServer'
 
 const DATA_DIR = path.resolve(process.cwd(), 'data')
@@ -57,10 +60,27 @@ async function pruneBackups(limit = 50): Promise<void> {
   await Promise.all(backups.slice(limit).map(file => fs.unlink(path.join(BACKUP_DIR, file)).catch(() => undefined)))
 }
 
+function attachAiProxy(server: {
+  middlewares: { use: (path: string, handler: (req: IncomingMessage, res: ServerResponse) => void) => void }
+  config: { logger: { error: (message: string) => void } }
+}): void {
+  server.middlewares.use(AI_PROXY_PATH, (req, res) => {
+    void handleAiProxy(req, res).catch(error => {
+      server.config.logger.error((error as Error).stack ?? String(error))
+      if (!res.headersSent) {
+        res.statusCode = 500
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ error: (error as Error).message }))
+      }
+    })
+  })
+}
+
 function localFileStorePlugin(): Plugin {
   return {
     name: 'local-file-store',
     configureServer(server) {
+      attachAiProxy(server)
       server.middlewares.use('/api/local-store', async (req, res) => {
         try {
           await ensureDataDirs()
@@ -125,6 +145,9 @@ function localFileStorePlugin(): Plugin {
           sendJson(res, 500, { error: (error as Error).message })
         }
       })
+    },
+    configurePreviewServer(server) {
+      attachAiProxy(server)
     },
   }
 }

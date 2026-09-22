@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import type { TrainingRecord } from '../types'
 import TrainingCard from '../components/TrainingCard'
 import { getCoachColor } from '../lib/recordPresentation'
+import { getRollingYearRecords } from '../lib/yearSummary'
+import { getStatsRecords, STATS_RANGE_LABELS, type StatsRange } from '../lib/statsSummary'
 import { useSport } from '../contexts/SportContext'
 import { useCoaches, useRecords } from '../hooks/useLocalData'
 
@@ -34,13 +36,19 @@ function buildHeatColors(accentColor: string): string[] {
 
 function longestStreak(records: TrainingRecord[]): number {
   if (records.length === 0) return 0
-  const dates = new Set(records.map(r => r.date))
-  let max = 0, cur = 0
-  const d = new Date()
-  for (let i = 0; i < 365; i++) {
-    const s = d.toISOString().slice(0, 10)
-    if (dates.has(s)) { cur++; max = Math.max(max, cur) } else { cur = 0 }
-    d.setDate(d.getDate() - 1)
+  const dates = [...new Set(records.map(record => record.date))].sort()
+  let max = 1
+  let current = 1
+  for (let i = 1; i < dates.length; i++) {
+    const previous = new Date(`${dates[i - 1]}T00:00:00`)
+    const currentDate = new Date(`${dates[i]}T00:00:00`)
+    const difference = Math.round((currentDate.getTime() - previous.getTime()) / 86_400_000)
+    if (difference === 1) {
+      current++
+      max = Math.max(max, current)
+    } else {
+      current = 1
+    }
   }
   return max
 }
@@ -96,10 +104,10 @@ function buildWeeklyData(records: TrainingRecord[]): { label: string; value: num
   return result
 }
 
-function buildMonthlyData(records: TrainingRecord[]): { label: string; value: number }[] {
+function buildMonthlyData(records: TrainingRecord[], months = 12): { label: string; value: number }[] {
   const today = new Date()
   const result: { label: string; value: number }[] = []
-  for (let m = 5; m >= 0; m--) {
+  for (let m = months - 1; m >= 0; m--) {
     const d = new Date(today.getFullYear(), today.getMonth() - m, 1)
     const prefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
     const mins = records.filter(r => r.date.startsWith(prefix)).reduce((s, r) => s + (r.duration ?? 0), 0)
@@ -182,6 +190,58 @@ function CoachBreakdown({ data }: { data: { coach: string; count: number; pct: n
   )
 }
 
+function buildTagData(records: TrainingRecord[]): { tag: string; count: number; pct: number }[] {
+  const counts = new Map<string, number>()
+  records.forEach(record => record.tags?.forEach(rawTag => {
+    const tag = rawTag.trim()
+    if (tag) counts.set(tag, (counts.get(tag) ?? 0) + 1)
+  }))
+  const total = records.length || 1
+  return [...counts.entries()]
+    .map(([tag, count]) => ({ tag, count, pct: Math.round(count / total * 100) }))
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, 'zh-CN'))
+    .slice(0, 8)
+}
+
+function TagBreakdown({ data, accentColor }: {
+  data: { tag: string; count: number; pct: number }[]
+  accentColor: string
+}) {
+  if (data.length === 0) return <p className="text-sm text-[#ADADAD] text-center py-4">暂无标签数据</p>
+  return (
+    <div className="flex flex-wrap gap-2">
+      {data.map(item => (
+        <span key={item.tag} className="px-2.5 py-1 rounded-full text-xs" style={{ backgroundColor: `${accentColor}18`, color: accentColor }}>
+          #{item.tag} · {item.count} 次
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function FocusBreakdown({ records }: { records: TrainingRecord[] }) {
+  const data = [
+    { label: '有改善', count: records.filter(record => record.focus?.outcome === 'improved').length, color: '#75A33B' },
+    { label: '没变化', count: records.filter(record => record.focus?.outcome === 'unchanged').length, color: '#D39B35' },
+    { label: '更困难', count: records.filter(record => record.focus?.outcome === 'worse').length, color: '#D9655D' },
+    { label: '待记录', count: records.filter(record => record.focus && !record.focus.outcome).length, color: '#A9A9A2' },
+  ]
+  const total = data.reduce((sum, item) => sum + item.count, 0)
+  if (total === 0) return <p className="text-sm text-[#ADADAD] text-center py-4">暂无训练关注点数据</p>
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {data.map(item => (
+        <div key={item.label} className="rounded-xl bg-[#F5F5F0] px-3 py-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-[#777]">{item.label}</span>
+            <span className="text-sm font-semibold" style={{ color: item.color }}>{item.count}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function CalendarPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -196,6 +256,7 @@ export default function CalendarPage() {
   const records = useRecords(sport.id)
   const coaches = useCoaches(sport.id)
   const [selected, setSelected] = useState<string | null>(null)
+  const [statsRange, setStatsRange] = useState<StatsRange>('rolling')
 
   const heatColors = buildHeatColors(sport.accentColor)
   function heatColor(minutes: number): string {
@@ -223,9 +284,10 @@ export default function CalendarPage() {
   const monthSessions = monthRecords.length
   const monthMinutes = monthRecords.reduce((s, r) => s + (r.duration ?? 0), 0)
 
-  const totalSessions = records.length
-  const totalHours = Math.round(records.reduce((s, r) => s + (r.duration ?? 0), 0) / 60 * 10) / 10
-  const streak = longestStreak(records)
+  const annualRecords = getRollingYearRecords(records, now)
+  const statsRecords = getStatsRecords(records, statsRange, now)
+  const statsHours = Math.round(statsRecords.reduce((s, r) => s + (r.duration ?? 0), 0) / 60 * 10) / 10
+  const statsStreak = longestStreak(statsRecords)
 
   const yearGrid = buildYearGrid().map(week =>
     week.map(cell => ({ ...cell, minutes: durationByDate[cell.date] ?? 0 }))
@@ -289,9 +351,17 @@ export default function CalendarPage() {
         ) : (
           <div className="flex gap-3 justify-center">
             {[
-              { v: totalSessions, u: '次', l: '总训练' },
-              { v: totalHours, u: 'h', l: '总时长' },
-              { v: streak, u: '天', l: '最长连续' },
+              ...(view === 'year'
+                ? [
+                    { v: annualRecords.length, u: '次', l: '过去一年' },
+                    { v: Math.round(annualRecords.reduce((sum, record) => sum + (record.duration ?? 0), 0) / 60 * 10) / 10, u: 'h', l: '训练时长' },
+                    { v: longestStreak(annualRecords), u: '天', l: '最长连续' },
+                  ]
+                : [
+                    { v: statsRecords.length, u: '次', l: STATS_RANGE_LABELS[statsRange] },
+                    { v: statsHours, u: 'h', l: '训练时长' },
+                    { v: statsStreak, u: '天', l: '最长连续' },
+                  ]),
             ].map(s => (
               <div key={s.l} className="flex-1 bg-white/10 rounded-xl p-2.5 text-center">
                 <div className="flex items-end justify-center gap-0.5">
@@ -386,42 +456,77 @@ export default function CalendarPage() {
 
         {view === 'stats' && (
           <div className="flex flex-col gap-4 pb-4">
+            {/* 统计范围 */}
+            <div className="flex gap-1 bg-[#F2F2EE] rounded-xl p-1">
+              {(['rolling', 'year', 'all'] as const).map(range => (
+                <button
+                  key={range}
+                  onClick={() => setStatsRange(range)}
+                  className={`flex-1 py-2 rounded-lg text-xs font-medium transition ${statsRange === range ? 'bg-white text-[#1A1A1A] shadow-sm' : 'text-[#888]'}`}
+                >
+                  {STATS_RANGE_LABELS[range]}
+                </button>
+              ))}
+            </div>
+
             {/* 每周训练次数 */}
             <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04)' }}>
               <div className="flex items-baseline justify-between mb-3">
                 <h3 className="text-sm font-semibold text-[#1A1A1A]">每周训练次数</h3>
                 <span className="text-xs text-[#ADADAD]">近 8 周</span>
               </div>
-              <BarChart data={buildWeeklyData(records)} accentColor={sport.accentColor} unit="次" />
+              <BarChart data={buildWeeklyData(statsRecords)} accentColor={sport.accentColor} unit="次" />
             </div>
 
             {/* 每月训练时长 */}
             <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04)' }}>
               <div className="flex items-baseline justify-between mb-3">
                 <h3 className="text-sm font-semibold text-[#1A1A1A]">每月训练时长</h3>
-                <span className="text-xs text-[#ADADAD]">近 6 个月</span>
+                <span className="text-xs text-[#ADADAD]">近 12 个月</span>
               </div>
-              <BarChart data={buildMonthlyData(records)} accentColor={sport.accentColor} unit="h" />
+              <BarChart data={buildMonthlyData(statsRecords)} accentColor={sport.accentColor} unit="h" />
             </div>
 
             {/* 教练分布 */}
-            {coaches.length > 0 && (
+            {statsRecords.length > 0 && coaches.length > 0 && (
               <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04)' }}>
                 <div className="flex items-baseline justify-between mb-3">
                   <h3 className="text-sm font-semibold text-[#1A1A1A]">教练分布</h3>
-                  <span className="text-xs text-[#ADADAD]">全部记录</span>
+                  <span className="text-xs text-[#ADADAD]">{STATS_RANGE_LABELS[statsRange]}</span>
                 </div>
-                <CoachBreakdown data={buildCoachData(records, coaches)} />
+                <CoachBreakdown data={buildCoachData(statsRecords, coaches)} />
               </div>
             )}
 
-            {records.length === 0 && (
+            {statsRecords.length > 0 && (
+              <>
+                {/* 标签分布 */}
+                <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04)' }}>
+                  <div className="flex items-baseline justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-[#1A1A1A]">训练标签</h3>
+                    <span className="text-xs text-[#ADADAD]">{STATS_RANGE_LABELS[statsRange]}</span>
+                  </div>
+                  <TagBreakdown data={buildTagData(statsRecords)} accentColor={sport.accentColor} />
+                </div>
+
+                {/* 训练关注结果 */}
+                <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04)' }}>
+                  <div className="flex items-baseline justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-[#1A1A1A]">训练关注结果</h3>
+                    <span className="text-xs text-[#ADADAD]">{STATS_RANGE_LABELS[statsRange]}</span>
+                  </div>
+                  <FocusBreakdown records={statsRecords} />
+                </div>
+              </>
+            )}
+
+            {statsRecords.length === 0 && (
               <div className="flex flex-col items-center justify-center py-16 gap-3">
                 <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl"
                   style={{ background: sport.accentColor + '18' }}>
                   {sport.icon}
                 </div>
-                <p className="text-sm text-[#888]">还没有训练记录</p>
+                <p className="text-sm text-[#888]">{STATS_RANGE_LABELS[statsRange]}暂无训练记录</p>
               </div>
             )}
           </div>

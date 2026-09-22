@@ -197,9 +197,26 @@ describe('AI transport', () => {
 
     await polishText('原内容', '')
 
-    expect(fetchMock.mock.calls[0][0]).toBe('https://api.deepseek.com/v1/chat/completions')
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.deepseek.com/chat/completions')
     const requestBody = JSON.parse(fetchMock.mock.calls[0][1]?.body as string)
     expect(requestBody.thinking).toEqual({ type: 'disabled' })
+  })
+
+  it('PackyAPI 的 /v1 base URL 不会被重复拼接', async () => {
+    setAIConfig({
+      apiUrl: 'https://cf.api.fan/v1',
+      apiKey: 'test-key',
+      model: 'deepseek-flash',
+      format: 'openai',
+    })
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      choices: [{ message: { content: '{"content":"动作更顺","reflection":""}' } }],
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await polishText('原内容', '')
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://cf.api.fan/v1/chat/completions')
   })
 
   it('不再忽略损坏的流式 JSON', async () => {
