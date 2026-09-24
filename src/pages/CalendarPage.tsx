@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import type { TrainingRecord } from '../types'
 import TrainingCard from '../components/TrainingCard'
 import { getCoachColor } from '../lib/recordPresentation'
-import { getRollingYearRecords } from '../lib/yearSummary'
+import { buildAnnualCalendar, getCalendarYearRecords } from '../lib/yearSummary'
 import { getStatsRecords, STATS_RANGE_LABELS, type StatsRange } from '../lib/statsSummary'
 import { useSport } from '../contexts/SportContext'
 import { useCoaches, useRecords } from '../hooks/useLocalData'
@@ -51,39 +51,6 @@ function longestStreak(records: TrainingRecord[]): number {
     }
   }
   return max
-}
-
-interface DayCell { date: string; minutes: number; isFuture: boolean }
-
-function buildYearGrid(): DayCell[][] {
-  const today = new Date()
-  const start = new Date(today)
-  start.setDate(start.getDate() - 52 * 7 + 1)
-  start.setDate(start.getDate() - start.getDay())
-  const weeks: DayCell[][] = []
-  const cur = new Date(start)
-  for (let w = 0; w < 53; w++) {
-    const week: DayCell[] = []
-    for (let d = 0; d < 7; d++) {
-      week.push({ date: cur.toISOString().slice(0, 10), minutes: 0, isFuture: cur > today })
-      cur.setDate(cur.getDate() + 1)
-    }
-    weeks.push(week)
-  }
-  return weeks
-}
-
-function buildMonthLabels(weeks: DayCell[][]): { label: string; col: number }[] {
-  const labels: { label: string; col: number }[] = []
-  let last = -1
-  weeks.forEach((week, col) => {
-    const m = new Date(week[0].date + 'T00:00:00').getMonth()
-    if (m !== last) {
-      labels.push({ label: new Date(week[0].date + 'T00:00:00').toLocaleDateString('zh-CN', { month: 'short' }), col })
-      last = m
-    }
-  })
-  return labels
 }
 
 function buildWeeklyData(records: TrainingRecord[]): { label: string; value: number }[] {
@@ -284,15 +251,12 @@ export default function CalendarPage() {
   const monthSessions = monthRecords.length
   const monthMinutes = monthRecords.reduce((s, r) => s + (r.duration ?? 0), 0)
 
-  const annualRecords = getRollingYearRecords(records, now)
+  const annualRecords = getCalendarYearRecords(records, year, now)
   const statsRecords = getStatsRecords(records, statsRange, now)
   const statsHours = Math.round(statsRecords.reduce((s, r) => s + (r.duration ?? 0), 0) / 60 * 10) / 10
   const statsStreak = longestStreak(statsRecords)
 
-  const yearGrid = buildYearGrid().map(week =>
-    week.map(cell => ({ ...cell, minutes: durationByDate[cell.date] ?? 0 }))
-  )
-  const monthLabels = buildMonthLabels(yearGrid)
+  const annualCalendar = buildAnnualCalendar(year, now)
 
   const todayStr = now.toISOString().slice(0, 10)
   const selectedRecords = selected ? (recordsByDate[selected] ?? []) : []
@@ -318,9 +282,24 @@ export default function CalendarPage() {
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </button>
             </>
+          ) : view === 'year' ? (
+            <>
+              <button onClick={() => { setYear(value => value - 1); setSelected(null) }}
+                aria-label="上一年"
+                className="w-9 h-9 flex items-center justify-center rounded-full bg-white/15 text-white">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+              <h1 className="text-lg font-semibold text-white">{year} 年</h1>
+              <button onClick={() => { setYear(value => value + 1); setSelected(null) }}
+                aria-label="下一年"
+                disabled={year >= now.getFullYear()}
+                className="w-9 h-9 flex items-center justify-center rounded-full bg-white/15 text-white disabled:opacity-30">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </>
           ) : (
             <h1 className="text-lg font-semibold text-white flex-1">
-              {view === 'year' ? '过去一年' : '训练统计'}
+              训练统计
             </h1>
           )}
         </div>
@@ -353,7 +332,7 @@ export default function CalendarPage() {
             {[
               ...(view === 'year'
                 ? [
-                    { v: annualRecords.length, u: '次', l: '过去一年' },
+                    { v: annualRecords.length, u: '次', l: '本年度' },
                     { v: Math.round(annualRecords.reduce((sum, record) => sum + (record.duration ?? 0), 0) / 60 * 10) / 10, u: 'h', l: '训练时长' },
                     { v: longestStreak(annualRecords), u: '天', l: '最长连续' },
                   ]
@@ -414,42 +393,53 @@ export default function CalendarPage() {
 
         {view === 'year' && (
           <div className="mb-4">
-            <div className="overflow-x-auto pb-2 -mx-4 px-4">
-              <div style={{ width: `${53 * 14}px` }}>
-                {/* 月份标签 */}
-                <div className="relative h-5 mb-1">
-                  {monthLabels.map(({ label, col }) => (
-                    <span key={col} className="absolute text-xs text-[#9B9B9B]"
-                      style={{ left: `${col * 14}px` }}>{label}</span>
-                  ))}
-                </div>
-                {/* 格子 */}
-                <div className="flex gap-[3px]">
-                  {yearGrid.map((week, wi) => (
-                    <div key={wi} className="flex flex-col gap-[3px]">
-                      {week.map((cell, di) => (
-                        <button
-                          key={di}
-                          onClick={() => !cell.isFuture && setSelected(selected === cell.date ? null : cell.date)}
-                          className="rounded-sm transition-transform active:scale-90"
-                          style={{
-                            width: 11, height: 11,
-                            backgroundColor: cell.isFuture ? '#E8E8E2' : cell.minutes > 0 ? heatColor(cell.minutes) : '#EBEBEB',
-                            boxShadow: selected === cell.date ? `0 0 0 1.5px ${sport.accentColor}` : undefined,
-                          }}
-                          title={cell.date}
-                        />
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </div>
+            <div className="grid grid-cols-3 gap-2">
+              {annualCalendar.map(({ year: calendarYear, month: calendarMonth, days }) => {
+                const isCurrentMonth = calendarYear === now.getFullYear() && calendarMonth === now.getMonth()
+                return (
+                  <button
+                    key={`${calendarYear}-${calendarMonth}`}
+                    aria-label={`${calendarYear}年${calendarMonth + 1}月`}
+                    onClick={() => {
+                      setYear(calendarYear)
+                      setMonth(calendarMonth)
+                      setSelected(null)
+                      setView('month')
+                      navigate(`/calendar?view=month&year=${calendarYear}&month=${calendarMonth + 1}`)
+                    }}
+                    className="min-h-[108px] rounded-xl px-2 py-2 flex flex-col items-center gap-2 transition-transform active:scale-95"
+                    style={{
+                      color: isCurrentMonth ? sport.accentColor : '#6B7280',
+                    }}
+                  >
+                    <span className="text-sm font-medium">{calendarMonth + 1}月</span>
+                    <span className="grid grid-cols-7 gap-1 w-full max-w-[112px]" aria-hidden="true">
+                      {days.map((cell, index) => {
+                        if (!cell) return <span key={`empty-${index}`} className="aspect-square" />
+                        const minutes = durationByDate[cell.date] ?? 0
+                        return (
+                          <span
+                            key={cell.date}
+                            className="aspect-square rounded-[3px]"
+                            style={{
+                              backgroundColor: cell.isFuture ? '#F1F1ED' : minutes > 0 ? heatColor(minutes) : '#E9EAE5',
+                            }}
+                          />
+                        )
+                      })}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
             {/* 图例 */}
-            <div className="flex items-center gap-1.5 justify-end mt-2">
-              <span className="text-xs text-[#9B9B9B]">少</span>
-              {heatColors.map((c, i) => <div key={i} className="w-3 h-3 rounded-sm" style={{ backgroundColor: c }} />)}
-              <span className="text-xs text-[#9B9B9B]">多</span>
+            <div className="flex items-center gap-1.5 justify-end mt-3">
+              <span className="text-xs text-[#9B9B9B]">训练少</span>
+              {[0.1, 0.2, 0.3, 0.38].map(opacity => {
+                const [r, g, b] = hexToRgb(sport.accentColor)
+                return <div key={opacity} className="w-3 h-3 rounded-sm" style={{ backgroundColor: `rgba(${r},${g},${b},${opacity})` }} />
+              })}
+              <span className="text-xs text-[#9B9B9B]">训练多</span>
             </div>
           </div>
         )}
